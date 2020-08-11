@@ -12,40 +12,32 @@ library(data.table)
 library(lubridate)
 library(stringr)
 
-source("S:/ENERGINST_EaB_Project_17_SMRP/Analysis/July_data_release/functions.R")
-
 # Define Input Variables --------------------------------------------------
 save_data <- TRUE
 
-hh_file_location <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/SM data/Half-hourly Readings Aug2018-May2020/"
-daily_file_location <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/SM data/Daily Readings Aug2018-May2020/"
+hh_file_location <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/Observatory2020_08/Original/"
+daily_file_location <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/Observatory2020_08/Original/"
 
 # Names for saving
-daily_file_format_removed <- "SERL_smart_meter_daily_v2020_07"
-hh_file_format_removed <- "SERL_smart_meter_hh_v2020_07"
-rt_file_format_removed <- "SERL_smart_meter_rt_summary_v2020_07"
-pp_summary_file_format_removed <- "SERL_participant_summary_v2020_07"
-saving_location <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/JulyStaticDataset/"
+daily_file_format_removed <- "SERL_smart_meter_daily_v2020_08"
+hh_file_format_removed <- "SERL_smart_meter_hh_v2020_08"
+rt_file_format_removed <- "SERL_smart_meter_rt_summary_v2020_08"
+pp_summary_file_format_removed <- "SERL_participant_summary_v2020_08"
+saving_location <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/Observatory2020_08/"
 
 ## Smart meter data 
 
 ### Half-hourly
-raw_hh <- c("Half-Hourly Readings Aug2018-Feb2019.csv",
-            "Half-Hourly Readings Mar2019-Jul2019.csv",
-            "Half-Hourly Readings Aug2019-Dec2019.csv",
-            "Half-Hourly Readings Jan2020-May2020.csv")
+raw_hh <- "Half-Hourly Readings Aug2018-Jul2020.csv"
                  
 ### Daily
-raw_daily <- c("Daily Readings Aug-Dec 2018.csv",
-               "Daily Readings Jan-Jun 2019.csv",
-               "Daily Readings Jul-Dec 2019.csv",
-               "Daily Readings Jan-May 2020.csv")
+raw_daily <- "Daily Readings Aug2018-Jul2020.csv"
 
 
 ## Auxilliary files
-theoretical_dates_file <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Smart Meter Data Quality Reports/theoretical_table_2020-07-26.csv"
+theoretical_dates_file <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/Observatory2020_08/actualStart_20_08_10.csv"
 
-collection_end_date <- ymd("2020-05-31")
+collection_end_date <- ymd("2020-07-31")
 
 survey_file <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Pilot_survey/pilot_survey_data_1675.RData"
 participant_details_file <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/SERL Participants Data 2020-07-09.csv"
@@ -479,7 +471,7 @@ determine.theoretical.read.dates <- function(theoretical_dates_file,
   setkey(consent_end_dates, PUPRN)
   theoretical_dates <- decommission_dates[theoretical_dates]
   theoretical_dates <- consent_end_dates[theoretical_dates]
-  theoretical_dates[, theoreticalStart := ymd(actualStartDate)]
+  theoretical_dates[, theoreticalStart := ymd(start)]
   theoretical_dates[, theoreticalEnd := pmin(WoC_CoT_effective_date - 1,
                                              dateDecommissioned,
                                              collection_end_date,
@@ -748,7 +740,7 @@ get.valid.read.dates <- function(hh, daily, readDates, error_codes_hh, error_cod
 
 handle.duplicate.listings <- function(t_d = theoretical_dates) {
   # only keep earliest start date. Setkey sorts from earliest to latest
-  setkey(t_d, actualStartDate)
+  setkey(t_d, start)
   # Unique keeps the first entry which we sorted to be the earliest date
   t_d_unique <- unique(t_d, by = c("PUPRN", "deviceType", "readType"))
   return(t_d_unique)
