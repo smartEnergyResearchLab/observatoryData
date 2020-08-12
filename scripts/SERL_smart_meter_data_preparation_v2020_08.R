@@ -14,6 +14,7 @@ library(stringr)
 
 # Define Input Variables --------------------------------------------------
 save_data <- TRUE
+remove_orig <- TRUE
 
 hh_file_location <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/Observatory2020_08/Original/"
 daily_file_location <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/Observatory2020_08/Original/"
@@ -23,7 +24,7 @@ daily_file_format_removed <- "SERL_smart_meter_daily_v2020_08"
 hh_file_format_removed <- "SERL_smart_meter_hh_v2020_08"
 rt_file_format_removed <- "SERL_smart_meter_rt_summary_v2020_08"
 pp_summary_file_format_removed <- "SERL_participant_summary_v2020_08"
-saving_location <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/Observatory2020_08/"
+saving_location <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/Observatory2020_08/Processed/"
 
 ## Smart meter data 
 
@@ -35,14 +36,14 @@ raw_daily <- "Daily Readings Aug2018-Jul2020.csv"
 
 
 ## Auxilliary files
-theoretical_dates_file <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/Observatory2020_08/actualStart_20_08_10.csv"
+theoretical_dates_file <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/Observatory2020_08/Original/actualStart_20_08_10.csv"
 
 collection_end_date <- ymd("2020-07-31")
 
 survey_file <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Pilot_survey/pilot_survey_data_1675.RData"
 participant_details_file <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/SERL Participants Data 2020-07-09.csv"
 EPC_file <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/SERL EPC Data.csv"
-inventory_file <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Inventory/Inventory Data 2020-06-01.csv"
+inventory_file <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Inventory/Monthly Inventory Data 2020-08-03.csv"
 
 
 # Error codes -------------------------------------------------------------
@@ -951,12 +952,12 @@ readDates <- determine.theoretical.read.dates(theoretical_dates_file,
 
   ptm <- proc.time()
   hh_orig <- import.and.rbind(raw_hh, hh_file_location)
-  proc.time() - ptm # 78.06 seconds elapsed
+  proc.time() - ptm # 91 seconds elapsed
 
 
   ptm <- proc.time()
   daily_orig <- import.and.rbind(raw_daily, daily_file_location)
-  proc.time() - ptm # 1.36 seconds elapsed
+  proc.time() - ptm # 4 seconds elapsed
 
 # deal with integer-64 in hh data (replace 64-bit equivalent of 16777215 with 32-bit version)
 hh <- copy(hh_orig)
@@ -985,7 +986,7 @@ daily <- get.meter.existence(daily, readDates, resolution = "daily")
 ptm <- proc.time()
 hh <- format.date.times(hh, resolution = "hh")
 daily <- format.date.times(daily, resolution = "daily")
-proc.time() - ptm # 42.02 seconds elapsed
+proc.time() - ptm # 53 seconds elapsed
 
 hh[, Valid_read_time := HH %in% seq(1:48)]
 daily <- validate.daily.read.time(daily)
@@ -993,7 +994,7 @@ daily <- validate.daily.read.time(daily)
 ptm <- proc.time()
 hh <- code.errors(hh, error_codes_hh)
 daily <- code.errors(daily, error_codes_daily)
-proc.time() - ptm # 26.94 seconds elapsed
+proc.time() - ptm # 23 seconds elapsed
 
 hh <- convert.gas.hh(hh)
 daily <- convert.gas.daily(daily)
@@ -1003,12 +1004,12 @@ daily <- convert.elec.daily(daily)
 
 ptm <- proc.time()
 daily <- calc.hh.sums.flag.mismatch(daily, hh) 
-proc.time() - ptm # 16.66 seconds elapsed
+proc.time() - ptm # 20 seconds elapsed
 
 ptm <- proc.time()
 daily <- flag.daily.sum.match(daily, elec_match_limit, elec_similar_limit,
                               gas_match_limit, gas_similar_limit)
-proc.time() - ptm # 0.47 seconds elapsed
+proc.time() - ptm # .4 seconds elapsed
   
 hh <- reorder.sm.cols(hh)
 daily <- reorder.sm.cols(daily, "daily")
