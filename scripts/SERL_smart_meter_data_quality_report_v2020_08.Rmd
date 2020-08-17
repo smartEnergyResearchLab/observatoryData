@@ -1,0 +1,935 @@
+---
+title: "Smart meter consumption data: Data quality report"
+author: "Ellen Webborn"
+date: "`r format(Sys.time(), '%d/%m/%Y')`"
+output: 
+  word_document:
+    reference_doc: SERL_word_template_landscape1.docx
+    toc: yes
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+# load relevant libraries
+library(data.table)
+library(tidyverse)
+library(knitr)
+library(captioner)
+library(lubridate)
+library(flextable)
+library(ggplot2)
+library(cowplot)
+library(scales)
+
+load_table_data <- TRUE
+make_plots <- TRUE
+
+# Define plotting/reporting variables for the markdown output
+fig.h <- 6
+fig.w <- 10
+fullwidth <- TRUE
+fig_caps <- captioner(prefix = "Figure")
+tab_caps <- captioner(prefix = "Table")
+font.size <- 12
+title.size <- 14
+geom.text.size <- 5
+dcp <- 2 # number of decimal places for rounding 
+
+
+rd <- function(x, d = dcp){
+  # Round to d decimal places and print to the full number of places, even if it ends in 0
+  # x is a vector
+  # Recommend setting dcp (decimal places) at the start of a document
+  format(round(x, digits = d), nsmall = d)
+}
+
+
+```
+
+```{r defineInputs, include = FALSE}
+collection_end_date <- ymd("2020-05-31")
+min_n_to_determine_unit_error <- 30
+sm_processing_filename <- "SERL_smart_meter_data_processing_v2020_07.R"
+
+# Copied from smart meter data processing file
+daily_file_format_removed <- "SERL_smart_meter_daily_v2020_08"
+hh_file_format_removed <- "SERL_smart_meter_hh_v2020_08"
+rt_file_format_removed <- "SERL_smart_meter_rt_summary_v2020_08"
+pp_summary_file_format_removed <- "SERL_participant_summary_v2020_08"
+saving_location <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/Observatory2020_08/Processed/"
+
+if(load_table_data == FALSE) {
+  load(paste(saving_location, daily_file_format_removed, ".RData", sep = ""))
+  load(paste(saving_location, hh_file_format_removed, ".RData", sep = ""))
+  load(paste(saving_location, rt_file_format_removed, ".RData", sep = ""))
+  load(paste(saving_location, pp_summary_file_format_removed, ".RData", sep = ""))
+} else {
+  load(paste(saving_location, "DQ_input.RData", sep = ""))
+}
+```
+
+```{r functions, include = FALSE}
+fill.table.meter.exists <-
+  function(device, schedule, participant_data) {
+    length(unique(participant_data[deviceType == device &
+                                     readType == schedule &
+                                     daysRange > 0, PUPRN]))
+  }
+
+my.flex <- function(t, autofit = FALSE) {
+  ft <- flextable(t)
+  ft <- theme_booktabs(ft)
+  ft <- theme_zebra(ft, 
+                    odd_header = rgb(84/255, 141/255, 212/255, 1),
+                    even_body = "transparent",
+                    odd_body = rgb(242/255, 242/255, 242/255, 1))
+  ft <- color(ft, color = "white", part = "header")
+  ft <- italic(ft, italic = TRUE, part = "header")
+  ft <- bold(ft, bold = FALSE, part = "header")
+  if(autofit == TRUE) {
+    ft <- autofit(ft)
+  } else{
+    ft <- set_table_properties(ft, layout = "autofit")
+  }
+  return(ft)
+}
+
+summarise.by.month <- function(dt = hh, 
+                               flag_name = "Elec_act_imp_flag",
+                               half_hourly_data = TRUE) {
+  by_pp <- dt[get(flag_name) == 1, .N,
+              by = .(PUPRN,
+                     year(Read_date_effective),
+                     month(Read_date_effective),
+                     d_in_m)]
+  by_pp[, poss := d_in_m * (1 + half_hourly_data * 47)]
+  by_pp[, perc := N / d_in_m * 100]
+  
+  summary_by_month <- by_pp[perc > 95, .N, keyby = .(year, month)]
+  summary_by_month[, month2 := as.Date(paste0("2000-", month, "-01"), "%Y-%m-%d")]
+  return(summary_by_month)
+}
+
+plot.monthly.summary <- function(summary_data, 
+                                 plot_title,
+                                 y_max = NA) {
+  output_fig <- ggplot(summary_data, aes(x = month2, y = N)) +
+    geom_bar(stat = "identity",
+             fill = rgb(84 / 255, 141 / 255, 212 / 255, 1)) +
+    facet_wrap(~ year, ncol = 1) +
+    labs(x = "Month",
+         y = "Number of participants with > 95% valid reads",
+         title = plot_title) +
+    theme(text = element_text(size = font.size),
+          plot.title = element_text(size = title.size)) +
+    scale_x_date(date_labels = "%b",
+                 limits = as.Date(c("1999-12-01", "2000-12-31"))) 
+  
+  if(!is.na(y_max)) {
+    output_fig <- output_fig + 
+      coord_cartesian(ylim = c(0, y_max))
+  }
+  return(output_fig)
+}
+
+
+
+```
+
+
+```{r docInfoTable, include = FALSE}
+info.tab <- data.table(
+  attributes = c("Creation date",
+                 "Version",
+                 "Author",
+                 "Project",
+                 "Organisation"),
+  info = c(
+    "2020-08-21",
+    "01",
+    "Ellen Webborn",
+    "Smart Energy Research Lab (SERL)",
+    "University College London (UCL)")
+)
+
+```
+
+```{r}
+kable(info.tab)
+```
+
+```{r captions, include = FALSE}
+
+tab_caps(name = "t.avail.summary.N", caption = "Number of participants with different minimum levels of valid import ('im') and export ('ex') readings.")
+
+tab_caps(name = "t.avail.summary.P", caption = "Percentage of participants with different minimum levels of valid import ('im') and export ('ex') readings. ‘With a device’ indicates the percentage of participants with that type of read available.")
+
+tab_caps(name = "t.hh.elec.flag", caption = "Half-hourly electricity active import and export readings: number and percent of readings with each error flag.")
+
+tab_caps(name = "t.hh.reactive.flag", caption = "Half-hourly electricity reactive import and export readings: number and percent of readings with each error flag.")
+
+tab_caps(name = "t.hh.gas.flag", caption = "Half-hourly gas import readings: number and percent of readings with each error flag.")
+
+tab_caps(name = "t.daily.flag", caption = "Daily electricity active import readings and daily gas import readings: number and percent of readings with each error flag.")
+
+
+tab_caps(name = "t.stats", caption = "Read statistics for valid readings of each type.")
+
+```
+
+
+```{r keyNumbers, include = FALSE}
+if(load_table_data == FALSE) {
+  first_read_date_hh <- min(hh$Read_date_effective)
+  last_read_date_hh <- max(hh$Read_date_effective)
+  n_hh_p <- length(unique(hh$PUPRN))
+  nrow_hh <- nrow(hh)
+  ncol_hh <- ncol(hh)
+
+  first_read_date_d <- min(daily$Read_date_effective)
+  last_read_date_d <- max(daily$Read_date_effective)
+  n_d_p <- length(unique(daily$PUPRN))
+  nrow_d <- nrow(daily)
+  ncol_d <- ncol(daily)
+  
+  nrow_reads <- nrow(rt_summary)
+  ncol_reads <- ncol(rt_summary)
+  
+  nrow_pp <- nrow(participant_summary)
+  ncol_pp <- ncol(participant_summary)
+
+  all_puprn <- unique(rt_summary$PUPRN)
+#n_no_elec <- length(all_puprn[!(all_puprn %in% elec_meters$PUPRN)]) # 0
+n_no_elec <-
+  length(all_puprn[!(all_puprn %in% rt_summary[deviceType == "ESME", PUPRN])]) # 0
+#n_no_gas <- length(all_puprn[!(all_puprn %in% gas_meters$PUPRN)])
+n_no_gas <-
+  length(all_puprn[!(all_puprn %in% rt_summary[deviceType == "GPF", PUPRN])]) # 431
+n_pp <- length(all_puprn)
+}
+
+
+
+```
+
+
+# Data availability
+
+The following tables give some key statistics for the distribution of data quality across participants, and some basic statistics about the valid readings. For more information about error definitions, see the Errors section below or the *SERL_smart_meter_data_documentation_v2020_08.pdf* accompanying document. The data are presented as percentages on the next page. The abbreviation ‘HH’ stands for ‘half-hourly’.
+
+All of the import read types have some participants for which there were no valid readings available, however over 900 participants have at least 90% of gas and electricity active import reads available.
+
+```{r availabilityStats, include = FALSE}
+
+  if(load_table_data == FALSE) {
+  avail.perc.for.table <- c(100, 99, 98, 95, 90, 75, 50, 25, 10, 5, 0)
+  nrows <- length(avail.perc.for.table) + 1
+  
+  n_id <- length(unique(rt_summary$PUPRN))
+  
+  t.avail.summary <- data.table(stat = rep(NA_character_, nrows),
+                                DgasN = rep(NA_real_, nrows),
+                                HgasN = rep(NA_real_, nrows),
+                                DelecN = rep(NA_real_, nrows),
+                                HelecN = rep(NA_real_, nrows),
+                                
+                                HreactImportN = rep(NA_real_, nrows),
+                                HreactExportN = rep(NA_real_, nrows),
+                                HexportN = rep(NA_real_, nrows),
+                                
+                                DgasP = rep(NA_real_, nrows),
+                                HgasP = rep(NA_real_, nrows),
+                                DelecP = rep(NA_real_, nrows),
+                                HelecP = rep(NA_real_, nrows),
+                                
+                                HreactImportP = rep(NA_real_, nrows),
+                                HreactExportP = rep(NA_real_, nrows),
+                                HexportP = rep(NA_real_, nrows))
+                                
+  deviceCols <- rep(c("GPF", "GPF", rep("ESME", 5)), 2)
+  #scheduleCols <- rep(c(rep(c("DailyLog", "ActiveImport"), 2), "ReactiveImport", "ReactiveExport", "Export"), 2)
+  scheduleCols <- rep(c(rep(c("DL", "AI"), 2), "RI", "RE", "AE"), 2)
+
+  data.cols.per.table <- (ncol(t.avail.summary) - 1) / 2
+  
+  t.avail.summary[1, stat := "With a device"]
+  for(i in 2:nrows) {
+    t.avail.summary[i, stat := paste(">= ", avail.perc.for.table[i-1], "% valid", sep = "")]
+  }
+  t.avail.summary[2, stat := "100% valid"]
+  
+  for(j in 2:(data.cols.per.table + 1)){
+    t.avail.summary[1, eval(colnames(t.avail.summary)[j]) := fill.table.meter.exists(deviceCols[j-1], scheduleCols[j-1],
+                                                                                     rt_summary)]
+    t.avail.summary[1, eval(colnames(t.avail.summary)[j+data.cols.per.table]) := round(get(colnames(t.avail.summary)[j]) / 
+                                                                                       n_id * 100, 1)]
+  }
+  
+  
+  for(i in 2:nrows) {
+    for(j in 2:(data.cols.per.table + 1)) {
+      t.avail.summary[i,  eval(colnames(t.avail.summary)[j]) := rt_summary[deviceType == deviceCols[j-1] &
+                                                                             readType == scheduleCols[j-1] & 
+                                                                             percValid >= avail.perc.for.table[i-1], .N]]
+      t.avail.summary[i, eval(colnames(t.avail.summary)[j+data.cols.per.table]) := round(get(colnames(t.avail.summary)[j]) / 
+                                                                      t.avail.summary[1, get(colnames(t.avail.summary)[j])] * 100, 1)]
+    }
+  }
+  
+  colnames(t.avail.summary) <- c(" ", "Daily gas (im)", "HH gas (im)", 
+                                 "Daily elec (active im)", "HH elec (active im)",
+                                 "HH elec (reactive im)", "HH elec (reactive ex)",
+                                 "HH elec (active ex)",
+                                 "Daily gas (im) (%)", "HH gas (im) (%)", 
+                                 "Daily elec (active im) (%)", "HH elec (active im) (%)",
+                                 "HH elec (reactive im) (%)", "HH elec (reactive ex) (%)",
+                                 "HH elec (active ex) (%)")
+  } else {
+    data.cols.per.table <- (ncol(t.avail.summary) - 1) / 2
+}
+
+t.avail.summary.N <- my.flex(t.avail.summary[, c(1:6, 8, 7)])
+
+t.avail.summary.P <- my.flex(t.avail.summary[, c(1, 9:13, 15, 14)])
+
+```
+
+
+
+`r tab_caps("t.avail.summary.N")`
+```{r}
+t.avail.summary.N
+```
+
+Table 2 shows the same data presented as a percentage. The first row of data (‘With a device’) shows the percent of participants we expect to have each type of read. Approximately 74% of households have a gas meter registered with the DCC (i.e. a SMETS2 gas meter or an upgraded SMETS1 meter). The percentages in the rows that follow are percentage of those With a device, e.g. 82.4% of households with a smart meter that we could collect data from have at least 90% of their readings available and valid. 
+
+`r tab_caps("t.avail.summary.P")`
+```{r}
+t.avail.summary.P
+```
+
+
+```{r overTime, include = FALSE}
+
+  plot_labels <- c(
+    "Daily gas import",
+    "HH gas import",
+    "Daily elec act import",
+    "HH elec act import",
+    "HH elec react import",
+    "HH elec act export",
+    "HH elec react export"
+  )
+
+if(load_table_data == FALSE) {
+  # add days in month to each date
+  daily[, d_in_m := days_in_month(Read_date_effective)]
+  hh[, d_in_m := days_in_month(Read_date_effective)]
+
+  
+  hh_data_flag <- c(FALSE, TRUE, FALSE, rep(TRUE, 4))
+  flag_names <- c(
+    "Gas_flag",
+    "Gas_flag",
+    "Elec_act_imp_flag",
+    "Elec_act_imp_flag",
+    "Elec_react_imp_flag",
+    "Elec_act_exp_flag",
+    "Elec_react_exp_flag"
+  )
+  
+  summaries <- vector(mode = "list", length = length(plot_labels))
+  monthly_plots <- vector(mode = "list", length = length(plot_labels))
+  
+  for (i in 1:length(plot_labels)) {
+    summaries[[i]] <- summarise.by.month(
+      if(hh_data_flag[i] == TRUE) {
+        hh
+      } else {daily},
+      flag_names[i],
+      hh_data_flag[i]
+    )
+  }
+  y_max <- rep(NA, length(plot_labels))
+}
+
+if(!exists("y_max")) {
+  # set the y max after seeing the data
+  y_max <- c(rep(1250, 2),
+             rep(1700, 3),
+             rep(120, 2))
+}
+
+y_max <- c(1250, 1700, 1250,
+             rep(1700, 2),
+             rep(120, 2))
+
+for(i in 1:length(plot_labels)) {
+  monthly_plots[[i]] <- plot.monthly.summary(summaries[[i]],
+                                             plot_labels[i],
+                                             y_max = y_max[i]
+                                             )
+}
+
+
+daily_over_time <- plot_grid(monthly_plots[[1]], 
+                           monthly_plots[[3]],
+                           nrow = 1)
+
+hh_im_over_time <- plot_grid(monthly_plots[[2]], 
+                           monthly_plots[[4]],
+                           monthly_plots[[5]],
+                           nrow = 1)
+
+hh_ex_over_time <- plot_grid(monthly_plots[[6]], 
+                           monthly_plots[[7]],
+                           nrow = 1)
+
+
+fig_caps(name = "daily_over_time", 
+         caption = "For daily reads: number of participants in the SERL Observatory with at least 95% of data available and valid, by month.")
+
+fig_caps(name = "hh_im_over_time", 
+         caption = "For half-hourly import reads: number of participants in the SERL Observatory with at least 95% of data available and valid, by month.")
+
+fig_caps(name = "hh_ex_over_time", 
+         caption = "For half-hourly export reads: number of participants in the SERL Observatory with at least 95% of data available and valid, by month.")
+
+```
+
+## Number of participants with data over time
+
+The following figures show how many participants have at least 95% of a each month's data available and flagged as valid. A participant's earliest read date depends on the date they signed up (we can collect up to 1 year of historic data from consent date ( 3 months for export data)), when their SMETS2 meter was installed (or upgraded if SMETS1), and when they moved into the house (if they moved in within the year preceding sign up). 
+
+
+`r fig_caps("daily_over_time")`
+```{r fig.width = fig.w * 0.7, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+daily_over_time
+```
+
+
+`r fig_caps("hh_im_over_time")`
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+hh_im_over_time
+```
+
+
+`r fig_caps("hh_ex_over_time")`
+```{r fig.width = fig.w * 0.7, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+hh_ex_over_time
+```
+
+# Errors
+
+More details about the error flags/codes can be found in the *SERL_smart_meter_data_documentation_v2020_08.pdf* accompanying document.
+
+## Half-hourly data
+
+The half-hourly data runs from `r first_read_date_hh` to `r last_read_date_hh` and `r n_hh_p` participants have half-hourly reads. For each half-hourly read, for each participant, the following tables show the number of errors and valid reads in the half-hourly electricity and gas datasets. Abbreviations: ‘act’ (active), ‘react (reactive) and ‘elec’ (electricity).
+
+Note that all `r n_pp` participants have an electricity meter and `r n_no_gas` participants don’t have a gas meter (`r round(n_no_gas/n_pp*100, 1)`%). The main issue for half-hourly electricity active import and export reads is missing data, which affects import reads much more than export reads (as a percentage of available reads for each). 
+
+```{r hhErrorTable, include = FALSE}
+
+if(load_table_data == FALSE) {
+flags <- data.table(
+  Flag = c(2:-5),
+  Meaning = c(
+    "No meter",
+    "Valid",
+    "Missing",
+    "Max read",
+    "Very high but not max",
+    "Negative",
+    "Elec in kWh",
+    "Invalid read time"
+  )
+)
+
+
+t.hh.flag <-  flags
+setorder(t.hh.flag, -Flag)
+
+# Active Elec
+t.hh.elec.flag <- copy(t.hh.flag[Flag != 2])
+t.hh.elec.flag[, act_elec_imp_N := 0]
+t.hh.elec.flag[Flag == 1, act_elec_imp_N := rt_summary[deviceType == "ESME" &
+                                                         readType == "AI", sum(f_1)]]
+t.hh.elec.flag[Flag == 0, act_elec_imp_N := rt_summary[deviceType == "ESME" &
+                                                         readType == "AI", sum(f_0)]]
+t.hh.elec.flag[Flag == -1, act_elec_imp_N := rt_summary[deviceType == "ESME" &
+                                                          readType == "AI", sum(f_minus1)]]
+t.hh.elec.flag[Flag == -2, act_elec_imp_N := rt_summary[deviceType == "ESME" &
+                                                          readType == "AI", sum(f_minus2)]]
+t.hh.elec.flag[Flag == -3, act_elec_imp_N := rt_summary[deviceType == "ESME" &
+                                                          readType == "AI", sum(f_minus3)]]
+t.hh.elec.flag[Flag == -4, act_elec_imp_N := rt_summary[deviceType == "ESME" &
+                                                          readType == "AI", sum(f_minus4)]]
+t.hh.elec.flag[Flag == -5, act_elec_imp_N := rt_summary[deviceType == "ESME" &
+                                                          readType == "AI", sum(f_minus5)]]
+t.hh.elec.flag[, act_elec_imp_P := rd(act_elec_imp_N / t.hh.elec.flag[Flag != 2, sum(act_elec_imp_N)] * 100)]
+
+t.hh.elec.flag[, act_elec_exp_N := 0]
+t.hh.elec.flag[Flag == 1, act_elec_exp_N := rt_summary[deviceType == "ESME" &
+                                                         readType == "AE", sum(f_1)]]
+t.hh.elec.flag[Flag == 0, act_elec_exp_N := rt_summary[deviceType == "ESME" &
+                                                         readType == "AE", sum(f_0)]]
+t.hh.elec.flag[Flag == -1, act_elec_exp_N := rt_summary[deviceType == "ESME" &
+                                                          readType == "AE", sum(f_minus1)]]
+t.hh.elec.flag[Flag == -2, act_elec_exp_N := rt_summary[deviceType == "ESME" &
+                                                          readType == "AE", sum(f_minus2)]]
+t.hh.elec.flag[Flag == -3, act_elec_exp_N := rt_summary[deviceType == "ESME" &
+                                                          readType == "AE", sum(f_minus3)]]
+t.hh.elec.flag[Flag == -4, act_elec_exp_N := rt_summary[deviceType == "ESME" &
+                                                          readType == "AE", sum(f_minus4)]]
+t.hh.elec.flag[Flag == -5, act_elec_exp_N := rt_summary[deviceType == "ESME" &
+                                                          readType == "AE", sum(f_minus5)]]
+t.hh.elec.flag[, act_elec_exp_P := rd(act_elec_exp_N / t.hh.elec.flag[Flag != 2, sum(act_elec_exp_N)] * 100)]
+
+colnames(t.hh.elec.flag) <-
+  c(
+    "Flag",
+    "Meaning",
+    "Act elec import (N)",
+    "Act elec import (%)",
+    "Act elec export (N)",
+    "Act elec export (%)"
+  )
+
+
+# Reactive elec
+t.hh.reactive.flag <- copy(t.hh.flag[Flag != 2 & Flag != -4])
+t.hh.reactive.flag[, react_elec_imp_N := 0]
+t.hh.reactive.flag[Flag == 1, react_elec_imp_N := rt_summary[deviceType == "ESME" &
+                                                               readType == "RI", sum(f_1)]]
+t.hh.reactive.flag[Flag == 0, react_elec_imp_N := rt_summary[deviceType == "ESME" &
+                                                               readType == "RI", sum(f_0)]]
+t.hh.reactive.flag[Flag == -1, react_elec_imp_N := rt_summary[deviceType == "ESME" &
+                                                                readType == "RI", sum(f_minus1)]]
+t.hh.reactive.flag[Flag == -2, react_elec_imp_N := rt_summary[deviceType == "ESME" &
+                                                                readType == "RI", sum(f_minus2)]]
+t.hh.reactive.flag[Flag == -3, react_elec_imp_N := rt_summary[deviceType == "ESME" &
+                                                                readType == "RI", sum(f_minus3)]]
+t.hh.reactive.flag[Flag == -5, react_elec_imp_N := rt_summary[deviceType == "ESME" &
+                                                                readType == "RI", sum(f_minus5)]]
+
+t.hh.reactive.flag[, react_elec_imp_P := rd(react_elec_imp_N / t.hh.reactive.flag[Flag != 2, sum(react_elec_imp_N)] * 100)]
+
+t.hh.reactive.flag[, react_elec_exp_N := 0]
+t.hh.reactive.flag[Flag == 1, react_elec_exp_N := rt_summary[deviceType == "ESME" &
+                                                               readType == "RE", sum(f_1)]]
+t.hh.reactive.flag[Flag == 0, react_elec_exp_N := rt_summary[deviceType == "ESME" &
+                                                               readType == "RE", sum(f_0)]]
+t.hh.reactive.flag[Flag == -1, react_elec_exp_N := rt_summary[deviceType == "ESME" &
+                                                                readType == "RE", sum(f_minus1)]]
+t.hh.reactive.flag[Flag == -2, react_elec_exp_N := rt_summary[deviceType == "ESME" &
+                                                                readType == "RE", sum(f_minus2)]]
+t.hh.reactive.flag[Flag == -3, react_elec_exp_N := rt_summary[deviceType == "ESME" &
+                                                                readType == "RE", sum(f_minus3)]]
+t.hh.reactive.flag[Flag == -5, react_elec_exp_N := rt_summary[deviceType == "ESME" &
+                                                                readType == "RE", sum(f_minus5)]]
+
+t.hh.reactive.flag[, react_elec_exp_P := rd(react_elec_exp_N / t.hh.reactive.flag[Flag != 2, sum(react_elec_exp_N)] * 100)]
+
+colnames(t.hh.reactive.flag) <-
+  c(
+    "Flag",
+    "Meaning",
+    "React elec import (N)",
+    "React elec import (%)",
+    "React elec export (N)",
+    "React elec export (%)"
+  )
+
+
+
+
+# Gas
+t.hh.gas.flag <- copy(t.hh.flag[Flag != 2 & Flag != -4])
+t.hh.gas.flag[, Number := 0]
+t.hh.gas.flag[Flag == 1, Number := rt_summary[deviceType == "GPF" &
+                                                readType == "AI", sum(f_1)]]
+t.hh.gas.flag[Flag == 0, Number := rt_summary[deviceType == "GPF" &
+                                                readType == "AI", sum(f_0)]]
+t.hh.gas.flag[Flag == -1, Number := rt_summary[deviceType == "GPF" &
+                                                 readType == "AI", sum(f_minus1)]]
+t.hh.gas.flag[Flag == -2, Number := rt_summary[deviceType == "GPF" &
+                                                 readType == "AI", sum(f_minus2)]]
+t.hh.gas.flag[Flag == -3, Number := rt_summary[deviceType == "GPF" &
+                                                 readType == "AI", sum(f_minus3)]]
+t.hh.gas.flag[Flag == -5, Number := rt_summary[deviceType == "GPF" &
+                                                 readType == "AI", sum(f_minus5)]]
+t.hh.gas.flag[, Percent := rd(Number / t.hh.gas.flag[Flag != 2, sum(Number)] * 100)]
+
+colnames(t.hh.gas.flag) <-
+  c("Flag", "Meaning", "Gas import (N)", "Gas import (%)")
+
+t.hh.elec.flag <- my.flex(t.hh.elec.flag)
+
+t.hh.reactive.flag <- my.flex(t.hh.reactive.flag)
+
+t.hh.gas.flag <- my.flex(t.hh.gas.flag)
+
+}
+
+
+```
+
+All participants have an electricity meter and `r n_no_gas` participants don't have a gas meter (`r rd(n_no_gas/n_pp*100)`%).
+
+`r tab_caps("t.hh.elec.flag")`
+```{r}
+t.hh.elec.flag
+```
+
+The electricity reactive import and export reads only have issues with missing data and invalid read times (but a maximum valid read has not yet been established for the reactive read data (this may change in future)). Less of the reactive import data are missing than the active import data, but the same amounts of reactive and active export reads are missing.
+
+`r tab_caps("t.hh.reactive.flag")`
+```{r}
+t.hh.reactive.flag
+```
+
+The half-hourly gas reads have greater availability than the half-hourly electricity active import reads, but suffer from a few incredibly high readings. The Max read error flag (-1) is when the read is the largest number storable/transmittable (all 1s in binary). For more details see the aforementioned smart meter data documentation.
+
+`r tab_caps("t.hh.gas.flag")`
+```{r}
+t.hh.gas.flag
+```
+
+
+## Daily Data
+
+The daily data runs from `r first_read_date_d` to `r last_read_date_d`. A total of `r n_pp` participants are included in these datasets. Of these, `r n_d_p` have daily reads. For each daily read, for each participant, the following tables show the number of errors and valid reads in the daily electricity and gas datasets. Note that in this table the gas and electricity reads are included together, as the only daily read types are gas import and electricity active import. There is greater availability of the gas data than the electricity data. Around 6% of the electricity data was suspected to be recorded in kWh not in Wh as prescribed by the Smart Energy Code.  
+
+```{r dailyErrorTable, include = FALSE}
+
+  if(load_table_data == FALSE) {
+  
+    t.daily.flag <- flags
+    setorder(t.daily.flag,-Flag)
+    
+    # Elec
+    t.daily.flag <- copy(t.daily.flag[Flag != 2])
+    t.daily.flag[, elec_N := 0]
+    t.daily.flag[Flag == 1, elec_N := rt_summary[deviceType == "ESME" &
+                                                   readType == "DL", sum(f_1)]]
+    t.daily.flag[Flag == 0, elec_N := rt_summary[deviceType == "ESME" &
+                                                   readType == "DL", sum(f_0)]]
+    t.daily.flag[Flag == -1, elec_N := rt_summary[deviceType == "ESME" &
+                                                    readType == "DL", sum(f_minus1)]]
+    t.daily.flag[Flag == -2, elec_N := rt_summary[deviceType == "ESME" &
+                                                    readType == "DL", sum(f_minus2)]]
+    t.daily.flag[Flag == -3, elec_N := rt_summary[deviceType == "ESME" &
+                                                    readType == "DL", sum(f_minus3)]]
+    t.daily.flag[Flag == -4, elec_N := rt_summary[deviceType == "ESME" &
+                                                    readType == "DL", sum(f_minus4)]]
+    
+    t.daily.flag[Flag == -5, elec_N := rt_summary[deviceType == "ESME" &
+                                                    readType == "DL", sum(f_minus5)]]
+    t.daily.flag[, elec_P := rd(elec_N / t.daily.flag[Flag != 2, sum(elec_N)] * 100)]
+    
+    t.daily.flag[, gas_N := 0]
+    t.daily.flag[Flag == 1, gas_N := rt_summary[deviceType == "GPF" &
+                                                  readType == "DL", sum(f_1)]]
+    t.daily.flag[Flag == 0, gas_N := rt_summary[deviceType == "GPF" &
+                                                  readType == "DL", sum(f_0)]]
+    t.daily.flag[Flag == -1, gas_N := rt_summary[deviceType == "GPF" &
+                                                   readType == "DL", sum(f_minus1)]]
+    t.daily.flag[Flag == -2, gas_N := rt_summary[deviceType == "GPF" &
+                                                   readType == "DL", sum(f_minus2)]]
+    t.daily.flag[Flag == -3, gas_N := rt_summary[deviceType == "GPF" &
+                                                   readType == "DL", sum(f_minus3)]]
+    t.daily.flag[Flag == -5, gas_N := rt_summary[deviceType == "GPF" &
+                                                   readType == "DL", sum(f_minus5)]]
+   
+    t.daily.flag[, gas_P := rd(gas_N / t.daily.flag[Flag != 2, sum(gas_N)] * 100)]
+    
+    colnames(t.daily.flag) <-
+      c("Flag",
+        "Meaning",
+        "Elec act imp (N)",
+        "Elec act imp (%)",
+        "Gas import (N)",
+        "Gas import (%)")
+    
+    t.daily.flag <- my.flex(t.daily.flag)
+  }
+
+
+
+```
+
+
+`r tab_caps("t.daily.flag")`
+```{r}
+t.daily.flag
+```
+
+
+# Read statistics
+
+The following table shows some basic statistics for each read type. Only 'valid' reads were included for these statistics (error code 1), excluding those recorded in the wrong units, at the wrong time, or outside of the defined valid data range. These ranges were deliberately defined to be very conservative so as not to rule out plausible outliers at this first stage of data quality analysis. The distribution of reads for some of these read types are shown in the next section.
+
+```{r readStats, include = FALSE}
+
+if(load_table_data == FALSE) {
+  dplaces <- 2
+  
+  stats.for.summary <- c("Max", "Mean", "Median", "Median exc. 0", "Min", "Standard Deviation")
+  
+  t.stats.nrows <- length(stats.for.summary)
+  t.stats <- data.table(stat = stats.for.summary,
+                        Dgas = rep(NA_real_, t.stats.nrows),
+                        Hgas = rep(NA_real_, t.stats.nrows),
+                        Delec = rep(NA_real_, t.stats.nrows),
+                        Helec = rep(NA_real_, t.stats.nrows),
+                        HreactImport = rep(NA_real_, t.stats.nrows),
+                        HreactExport = rep(NA_real_, t.stats.nrows),
+                        Hexport = rep(NA_real_, t.stats.nrows))
+  
+  t.stats[1, Dgas := round(daily[Gas_flag == 1, max(Gas_d_kWh)], dplaces)]
+  t.stats[1, Hgas := round(hh[Gas_flag == 1, max(Gas_hh_kWh)], dplaces)]
+  t.stats[1, Delec := round(daily[Elec_act_imp_flag == 1, max(Elec_act_imp_d_kWh)], dplaces)]
+  t.stats[1, Helec := round(hh[Elec_act_imp_flag == 1, max(Elec_act_imp_hh_Wh)/1000], dplaces)]
+  t.stats[1, HreactImport := round(hh[Elec_react_imp_flag == 1, max(Elec_react_imp_hh_varh)/1000], dplaces)]
+  t.stats[1, HreactExport := round(hh[Elec_react_exp_flag == 1, max(Elec_react_exp_hh_varh)/1000], dplaces)]
+  t.stats[1, Hexport := round(hh[Elec_act_exp_flag == 1, max(Elec_act_exp_hh_Wh)/1000], dplaces)]
+  
+  
+  t.stats[2, Dgas := round(daily[Gas_flag == 1, mean(Gas_d_kWh)], dplaces)]
+  t.stats[2, Hgas := round(hh[Gas_flag == 1, mean(Gas_hh_kWh)], dplaces)]
+  t.stats[2, Delec := round(daily[Elec_act_imp_flag == 1, mean(Elec_act_imp_d_kWh)], dplaces)]
+  t.stats[2, Helec := round(hh[Elec_act_imp_flag == 1, mean(Elec_act_imp_hh_Wh)/1000], dplaces)]
+  t.stats[2, HreactImport := round(hh[Elec_react_imp_flag == 1, mean(Elec_react_imp_hh_varh)/1000], dplaces)]
+  t.stats[2, HreactExport := round(hh[Elec_react_exp_flag == 1, mean(Elec_react_exp_hh_varh)/1000], dplaces)]
+  t.stats[2, Hexport := round(hh[Elec_act_exp_flag == 1, mean(Elec_act_exp_hh_Wh)/1000], dplaces)]
+  
+  t.stats[3, Dgas := round(daily[Gas_flag == 1, median(Gas_d_kWh)], dplaces)]
+  t.stats[3, Hgas := round(hh[Gas_flag == 1, median(Gas_hh_kWh)], dplaces)]
+  t.stats[3, Delec := round(daily[Elec_act_imp_flag == 1, median(Elec_act_imp_d_kWh)], dplaces)]
+  t.stats[3, Helec := round(hh[Elec_act_imp_flag == 1, median(Elec_act_imp_hh_Wh)/1000], dplaces)]
+  t.stats[3, HreactImport := round(hh[Elec_react_imp_flag == 1, median(Elec_react_imp_hh_varh)/1000], dplaces)]
+  t.stats[3, HreactExport := round(hh[Elec_react_exp_flag == 1, median(Elec_react_exp_hh_varh)/1000], dplaces)]
+  t.stats[3, Hexport := round(hh[Elec_act_exp_flag == 1, median(Elec_act_exp_hh_Wh)/1000], dplaces)]
+  
+  t.stats[4, Dgas := round(daily[Gas_flag == 1 & Gas_d_kWh > 0, median(Gas_d_kWh)], dplaces)]
+  t.stats[4, Hgas := round(hh[Gas_flag == 1 & Gas_hh_kWh > 0, median(Gas_hh_kWh)], dplaces)]
+  t.stats[4, Delec := round(daily[Elec_act_imp_flag == 1 & Elec_act_imp_d_kWh > 0, median(Elec_act_imp_d_kWh)], dplaces)]
+  t.stats[4, Helec := round(hh[Elec_act_imp_flag == 1 & Elec_act_imp_hh_Wh > 0, median(Elec_act_imp_hh_Wh)/1000], dplaces)]
+  t.stats[4, HreactImport := round(hh[Elec_react_imp_flag == 1 & Elec_react_imp_hh_varh > 0,
+                                      median(Elec_react_imp_hh_varh)/1000], dplaces)]
+  t.stats[4, HreactExport := round(hh[Elec_react_exp_flag == 1 & Elec_react_exp_hh_varh > 0,
+                                      median(Elec_react_exp_hh_varh)/1000], dplaces)]
+  t.stats[4, Hexport := round(hh[Elec_act_exp_flag == 1 & Elec_act_exp_hh_Wh > 0, 
+                                 median(Elec_act_exp_hh_Wh)/1000], dplaces)]
+  
+  
+  t.stats[5, Dgas := round(daily[Gas_flag == 1, min(Gas_d_kWh)], dplaces)]
+  t.stats[5, Hgas := round(hh[Gas_flag == 1, min(Gas_hh_kWh)], dplaces)]
+  t.stats[5, Delec := round(daily[Elec_act_imp_flag == 1, min(Elec_act_imp_d_kWh)], dplaces)]
+  t.stats[5, Helec := round(hh[Elec_act_imp_flag == 1, min(Elec_act_imp_hh_Wh)/1000], dplaces)]
+  t.stats[5, HreactImport := round(hh[Elec_react_imp_flag == 1, min(Elec_react_imp_hh_varh)/1000], dplaces)]
+  t.stats[5, HreactExport := round(hh[Elec_react_exp_flag == 1, min(Elec_react_exp_hh_varh)/1000], dplaces)]
+  t.stats[5, Hexport := round(hh[Elec_act_exp_flag == 1, min(Elec_act_exp_hh_Wh)/1000], dplaces)]
+  
+  t.stats[6, Dgas := round(daily[Gas_flag == 1, sd(Gas_d_kWh)], dplaces)]
+  t.stats[6, Hgas := round(hh[Gas_flag == 1, sd(Gas_hh_kWh)], dplaces)]
+  t.stats[6, Delec := round(daily[Elec_act_imp_flag == 1, sd(Elec_act_imp_d_kWh)], dplaces)]
+  t.stats[6, Helec := round(hh[Elec_act_imp_flag == 1, sd(Elec_act_imp_hh_Wh)/1000], dplaces)]
+  t.stats[6, HreactImport := round(hh[Elec_react_imp_flag == 1, sd(Elec_react_imp_hh_varh)/1000], dplaces)]
+  t.stats[6, HreactExport := round(hh[Elec_react_exp_flag == 1, sd(Elec_react_exp_hh_varh)/1000], dplaces)]
+  t.stats[6, Hexport := round(hh[Elec_act_exp_flag == 1, sd(Elec_act_exp_hh_Wh)/1000], dplaces)]
+  
+  colnames(t.stats) <- c(" ", "Daily gas im (kWh)", "HH gas im (kWh)", "Daily act elec im (kWh)", "HH act elec im (kWh)",
+                         "HH react elec im (kvarh)", "HH react elec ex (kvarh)", "HH act elec ex (kWh)")
+  
+  
+  t.stats <- my.flex(t.stats[, c(1:6, 8, 7)])
+  
+}
+
+
+
+```
+
+
+`r tab_caps("t.stats")`
+```{r}
+t.stats
+```
+
+## Distributions of valid reads
+
+### Half-hourly reads
+
+The following figures show the half-hourly electricity active and gas import readings deemed to be valid. Reactive reads will be summarised in future documents. 
+
+#### Electricity active import
+
+The electricity active import reads form a distribution with a shape that is typical in the literature for this type of data.
+
+
+
+```{r byParticipantPlots, include = FALSE}
+
+if(load_table_data == FALSE) {
+  
+  # Elec
+  # f.hh.elec <- ggplot(hh[Elec_act_imp_flag == 1], aes(Elec_act_imp_hh_Wh)) + 
+  # geom_histogram(aes(y = ..density..), binwidth = 50) + 
+  # labs(x = "Valid half-hourly electricity active import readings (Wh)") +
+  # theme(text = element_text(size = font.size))
+  # fig_caps(name = "f.hh.elec", 
+  #          caption = "Histogram of half-hourly electricity active import readings, excluding those flagged as errors. Full range shown, bin width = 50 Wh.")
+
+n_points <- 2000000  
+# half-hourly  
+f.hh.elec.act.imp.reduced <- ggplot(hh[Elec_act_imp_flag == 1 & Elec_act_imp_hh_Wh < 1000][1:n_points], 
+                                    aes(Elec_act_imp_hh_Wh)) + 
+  geom_histogram(aes(y = ..density..), 
+                 binwidth = 10,
+                 fill = rgb(84 / 255, 141 / 255, 212 / 255, 1)) + 
+  labs(x = "Valid half-hourly electricity active import readings (Wh)") +
+  theme(text = element_text(size = font.size)) + 
+  scale_x_continuous(breaks = seq(0, 1000, 200))
+
+f.hh.elec.act.exp.reduced <- ggplot(hh[Elec_act_exp_flag == 1 
+                                               & Elec_act_exp_hh_Wh < 200 
+                                               & Elec_act_exp_hh_Wh > 0],
+                                    aes(Elec_act_exp_hh_Wh)) + 
+  geom_histogram(aes(y = ..density..), 
+                 binwidth = 2,
+                 fill = rgb(84 / 255, 141 / 255, 212 / 255, 1)) + 
+  labs(x = "Valid half-hourly electricity active export readings > 0 (Wh)") +
+  theme(text = element_text(size = font.size)) + 
+  scale_x_continuous(breaks = seq(0, 200, 20))
+
+f.hh.gas.imp.reduced <- ggplot(hh[Gas_flag == 1 & Gas_hh_kWh > 0 & Gas_hh_kWh < 10], 
+                               aes(Gas_hh_kWh)) + 
+  geom_histogram(aes(y = ..density..), 
+                 binwidth = 0.2,
+                 fill = rgb(84 / 255, 141 / 255, 212 / 255, 1)) + 
+  labs(x = "Valid half-hourly gas import readings (kWh)") +
+  theme(text = element_text(size = font.size))
+
+# daily
+f.d.elec.act.imp.reduced <- ggplot(daily[Elec_act_imp_flag == 1 &
+                                                 Elec_act_imp_d_kWh < 50], aes(Elec_act_imp_d_kWh)) + 
+  geom_histogram(aes(y = ..density..), 
+                 binwidth = 0.5,
+                 fill = rgb(84 / 255, 141 / 255, 212 / 255, 1)) + 
+  labs(x = "Valid daily electricity active import readings (kWh)") +
+  theme(text = element_text(size = font.size))
+
+f.d.gas.imp.reduced <- ggplot(daily[Gas_flag == 1 & Gas_d_kWh < 200], aes(Gas_d_kWh)) + 
+  geom_histogram(aes(y = ..density..), 
+                 binwidth = 2,
+                 fill = rgb(84 / 255, 141 / 255, 212 / 255, 1)) + 
+  labs(x = "Valid daily gas import readings (kWh)") +
+  theme(text = element_text(size = font.size))
+
+}
+# Caption
+
+fig_caps(name = "f.hh.elec.act.imp.reduced", 
+         caption = "Histogram of half-hourly electricity active import readings, excluding those flagged as errors. Restricted to readings under 1000 Wh (1 kWh), bin width = 10 Wh.")
+
+fig_caps(name = "f.hh.elec.act.exp.reduced", 
+         caption = "Histogram of half-hourly electricity active export readings, excluding those flagged as errors and excluding 0 reads as these dwarfed all others. Also restricted to readings under 200 Wh, bin width = 2 Wh.")
+
+fig_caps(name = "f.hh.gas.imp.reduced", 
+         caption = "Histogram of half-hourly gas import readings, excluding those flagged as errors. Restricted to readings under 10 kWh but strictly greater than 0, bin width = 0.2 kWh.")
+
+fig_caps(name = "f.d.elec.act.imp.reduced", 
+         caption = "Histogram of daily electricity active import readings, excluding those flagged as errors. Restricted to readings under 50 kWh, bin width = 0.5 kWh.")
+
+fig_caps(name = "f.d.gas.imp.reduced", 
+         caption = "Histogram of daily gas import readings, excluding those flagged as errors. Restricted to readings under 200 kWh, bin width = 2 kWh.")
+
+
+```
+
+
+`r fig_caps("f.hh.elec.act.imp.reduced")`
+```{r fig.width = fig.w * 0.8, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+f.hh.elec.act.imp.reduced
+```
+
+#### Electricity active export
+
+Figure 2 excludes readings equal to 0 because there are so many that the rest of the plot is difficult to see. There is still a spike of very low reads, as we would expect from times with low light such as during winter.
+
+`r fig_caps("f.hh.elec.act.exp.reduced")`
+```{r fig.width = fig.w * 0.8, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+f.hh.elec.act.exp.reduced
+```
+
+#### Gas import
+
+Gas usage is much higher than electricity usage as it is the most common source of heating in the UK. Therefore Figure 3 reports values in kWh rather than Wh. Note that gas data are recorded in m3 and converted into an estimate for kWh. Since the median half-hourly gas read is 0, 0 reads have been excluded from Figure 3 in order for the rest of the figure to be clearly visible.
+
+`r fig_caps("f.hh.gas.imp.reduced")`
+```{r fig.width = fig.w * 0.8, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+f.hh.gas.imp.reduced
+```
+
+
+### Daily reads
+
+#### Electricity active import
+
+While most of the distribution takes the expected shape for this type of data, there is a significant spike at 0. This could be a read error that has not yet been investigated, or some houses may have been left unoccupied for full days (however all electronic-consuming devices including fridges and freezers would need to have been switched off). It has not yet been determined whether this is the result of a few houses with zero read data for many days or many houses with a few days with zero reads.
+
+`r fig_caps("f.d.elec.act.imp.reduced")`
+```{r fig.width = fig.w * 0.8, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+f.d.elec.act.imp.reduced
+```
+
+#### Gas import
+
+The daily gas import read distribution looks approximately as we would expect. There is a large spike at 0 where heating is not used for a day.
+
+`r fig_caps("f.d.gas.imp.reduced")`
+```{r fig.width = fig.w * 0.8, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+f.d.gas.imp.reduced
+```
+
+
+```{r saving, include = FALSE}
+
+if(load_table_data == FALSE) {
+  save(
+    first_read_date_d,
+    last_read_date_d,
+    n_d_p,
+    nrow_d,
+    t.avail.summary,
+    t.hh.elec.flag,
+    t.hh.reactive.flag,
+    t.hh.gas.flag,
+    t.daily.flag,
+    t.stats,
+    f.hh.elec.act.imp.reduced,
+    f.hh.elec.act.exp.reduced,
+    f.hh.gas.imp.reduced,
+    f.d.elec.act.imp.reduced,
+    f.d.gas.imp.reduced,
+    first_read_date_hh,
+    last_read_date_hh,
+    n_hh_p,
+    n_no_gas,
+    n_pp,
+    n_d_p,
+    n_id,
+    summaries,
+    monthly_plots,
+    file = paste(saving_location, "DQ_input.RData", sep = "")
+  )
+}
+
+
+
+```
+

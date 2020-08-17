@@ -13,7 +13,7 @@ library(lubridate)
 library(stringr)
 
 # Define Input Variables --------------------------------------------------
-save_data <- TRUE
+save_data <- FALSE
 remove_orig <- TRUE
 
 hh_file_location <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/Observatory2020_08/Original/"
@@ -1044,23 +1044,23 @@ if(save_data == TRUE) {
 
 ptm <- proc.time()
 rt_summary <- create.read.type.summary(hh, daily, readDates, error_codes_hh, error_codes_daily) 
-proc.time() - ptm # 10.71 seconds elapsed
+proc.time() - ptm # 12 seconds elapsed
 
 ptm <- proc.time()
 rt_summary <- get.valid.read.dates(hh, daily, readDates, error_codes_hh, error_codes_daily, rt_summary) 
-proc.time() - ptm # 8.23 seconds elapsed
+proc.time() - ptm # 11 seconds elapsed
 
 rt_summary <- correct.theoretical.start(rt_summary)
 
 ptm <- proc.time()
 rt_summary <- calc.error.percentages(rt_summary)
-proc.time() - ptm # 10.71 seconds elapsed
+proc.time() - ptm # 0.02 seconds elapsed
 
 rt_summary <- correct.rt.perc.out.of.date.range(rt_summary)
 
 ptm <- proc.time()
 rt_summary <- get.read.type.stats(hh, daily, rt_summary, error_codes_hh, error_codes_daily)
-proc.time() - ptm # 130 seconds elapsed
+proc.time() - ptm # 72 seconds elapsed
 
 rt_summary <- reorder.rt_summary.cols(rt_summary)
 
@@ -1069,12 +1069,12 @@ if(save_data == TRUE) {
   ptm <- proc.time()
   fwrite(rt_summary, 
          file = paste(saving_location, rt_file_format_removed, ".csv", sep =  ""))
-  proc.time() - ptm # 0.1 seconds elapsed
+  proc.time() - ptm # 0.2 seconds elapsed
   
   ptm <- proc.time()
   save(rt_summary, 
        file = paste(saving_location, rt_file_format_removed, ".RData", sep = ""))
-  proc.time() - ptm # 0.08 seconds elapsed
+  proc.time() - ptm # 0.2 seconds elapsed
 }
 
 proc.time() - startTime
@@ -1087,14 +1087,14 @@ participant_summary <- create.participant.summary(rt_summary,
                                                   survey_file, 
                                                   participant_details_file, 
                                                   EPC_file)
-proc.time() - ptm # 0.74 seconds elapsed
+proc.time() - ptm # 1.2 seconds elapsed
 
 # save
 if(save_data == TRUE) {
   ptm <- proc.time()
   fwrite(participant_summary, 
          file = paste(saving_location, pp_summary_file_format_removed, ".csv", sep =  ""))
-  proc.time() - ptm # 0.1 seconds elapsed
+  proc.time() - ptm # 0.06 seconds elapsed
   
   ptm <- proc.time()
   save(participant_summary, 
