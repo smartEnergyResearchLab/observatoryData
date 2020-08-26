@@ -1,0 +1,288 @@
+---
+title: "EPC data: technical documentation"
+output: 
+  word_document:
+    reference_doc: SERL_word_template_portrait1.docx
+    toc: no
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+library(data.table)
+library(lubridate)
+library(knitr)
+library(captioner)
+library(flextable)
+
+
+
+fig_caps <- captioner(prefix = "Figure")
+tab_caps <- captioner(prefix = "Table")
+
+```
+
+```{r defineInputs, include=FALSE}
+
+load_epc <- FALSE # FALSE if using previously saved .RData
+write_epc <- FALSE # TRUE if we want to save a new csv data file
+
+epc_folder <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/EPC data/"
+epc_loading_filename <- "SERL EPC Data.csv"
+saving_location <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/JulyStaticDataset/"
+epc_saving_filename <- "SERL_EPC_data_v2020_07"
+
+```
+
+```{r functions, include = FALSE}
+
+get.cases <- function(i, d = epc) {
+  v <- colnames(d)[i]
+  tmp <- epc[, .N, keyby = v]
+  tmp2 <- data.table(Variable = rep(v, nrow(tmp)),
+                     Value = tmp[, 1],
+                     Cases = tmp[, 2])
+  colnames(tmp2) <- c("Variable", "Value", "Cases")
+  return(tmp2)
+}
+
+my.flex <- function(t, autofit = FALSE) {
+  ft <- flextable(t)
+  ft <- theme_booktabs(ft)
+  ft <- theme_zebra(ft, 
+                    odd_header = rgb(84/255, 141/255, 212/255, 1),
+                    even_body = "transparent",
+                    odd_body = rgb(242/255, 242/255, 242/255, 1))
+  ft <- color(ft, color = "white", part = "header")
+  ft <- italic(ft, italic = TRUE, part = "header")
+  ft <- bold(ft, bold = FALSE, part = "header")
+  if(autofit == TRUE) {
+    ft <- autofit(ft)
+  } else{
+    ft <- set_table_properties(ft, layout = "autofit")
+  }
+  return(ft)
+}
+
+```
+
+```{r loadData, include=FALSE}
+
+if(load_epc == TRUE) {
+  epc_orig <- fread(paste(epc_folder, epc_loading_filename, sep = ""))
+  epc <- copy(epc_orig)
+  setnames(epc, old = "puprn", new = "PUPRN")
+  save(epc,
+       file = paste(saving_location, epc_saving_filename, ".RData", sep = ""))
+} else {
+  load(paste(saving_location, epc_saving_filename, ".RData", sep = ""))
+}
+
+if(write_epc == TRUE) {
+  fwrite(epc, 
+         file = paste(saving_location, epc_saving_filename, ".csv", sep = ""))
+}
+
+```
+
+```{r docInfoTable, include = FALSE}
+info.tab <- data.table(
+  attributes = c("Creation date",
+                 "Data version",
+                 "Author",
+                 "Project",
+                 "Organisation"),
+  info = c(
+    "2020-08-22",
+    "2020-07",
+    "Ellen Webborn",
+    "Smart Energy Research Lab (SERL)",
+    "University College London (UCL)")
+)
+
+```
+
+```{r}
+kable(info.tab)
+```
+
+```{r captions, include = FALSE}
+
+tab_caps(name = "epc_fields", 
+         caption = "All EPC variables, the number of unique values found for each variable, the variable (R) class, and an example from the dataset.")
+
+tab_caps(name = "summary_short", 
+         caption = "The number and percent of each value found in the dataset for each variable with fewer than 10 unique values found.")
+
+tab_caps(name = "stats", 
+         caption = "Basic statistcs for integer and numeric variables. 'n' is the number of values used in the calculations (i.e. the non-NA values).")
+
+```
+
+```{r summary, include = FALSE}
+ncol_epc <- ncol(epc)
+nrow_epc <- nrow(epc)
+
+# Create a summary of the values for each variable
+
+test_list <- lapply(2:ncol_epc, get.cases)
+
+summary <- rbindlist(test_list)
+summary <- rbind(data.table(Variable = "PUPRN",
+                      Value = "-",
+                      Cases = nrow_epc), 
+                 summary)
+
+summary[, Percent := round(Cases / nrow_epc * 100, 2)]
+
+
+epc_fields <- data.table(Variable = colnames(epc),
+                         class = lapply(epc, class),
+                         example = rep(NA_character_, ncol_epc),
+                         position = 1:ncol(epc)
+                         )
+setkey(epc_fields, Variable)
+tmp <- summary[, .N, keyby = Variable]
+epc_fields <- tmp[epc_fields]
+setnames(epc_fields, 
+         old = "N", 
+         new = "uniqueValues")
+
+epc_fields[Variable == "PUPRN", 
+           uniqueValues := nrow_epc]
+
+setkey(epc_fields, position)
+
+set.seed(3)
+for(x in 1:ncol_epc) {
+  epc_fields[x, example := epc[round(runif(n = 1, min = 1, max = nrow_epc), 0), 
+                               x, 
+                               with = FALSE]]
+}
+
+# Replace cases that gave missing, NA, etc. values
+epc_fields[Variable == "floor_level", 
+           example := "Ground"]
+epc_fields[Variable == "flat_top_storey", 
+           example := "Y"]
+epc_fields[Variable == "flat_storey_count", 
+           example := "2"]
+epc_fields[Variable == "number_open_fireplaces", 
+           example := "0"]
+epc_fields[Variable == "floor_energy_eff", 
+           example := "Very Good"]
+epc_fields[Variable == "floor_env_eff", 
+           example := "Good"]
+epc_fields[Variable == "sheating_energy_eff", 
+           example := "N/A"] # No other responses
+epc_fields[Variable == "sheating_env_eff", 
+           example := "N/A"] # No other responses
+epc_fields[Variable == "roof_energy_eff", 
+           example := "Good"]
+epc_fields[Variable == "main_fuel", 
+           example := "oil (not community)"]
+epc_fields[Variable == "heat_loss_corridoor", 
+           example := "unheated corridor"]
+epc_fields[Variable == "unheated_corridor_length", 
+           example := "4.998"]
+epc_fields[Variable == "floor_height", 
+           example := "2.400"]
+
+
+for_short_summary <- epc_fields[uniqueValues < 10, Variable]
+
+summary_short <- summary[Variable %in% for_short_summary | Variable == "PUPRN",]
+
+for_stats <- epc_fields$Variable
+n <- length(for_stats)
+
+for_stats_numeric <- c()
+for(i in 1:n) {
+  if(class(epc[, get(for_stats[i])]) %in% c("numeric", "integer")) {
+    for_stats_numeric <- c(for_stats_numeric,
+                           for_stats[i])
+  }
+}
+
+m <- length(for_stats_numeric)
+stats <- data.table(Variable = for_stats_numeric,
+                    N = rep(NA_integer_, m),
+                    Min = rep(NA_real_, m),
+                    Max = rep(NA_real_, m),
+                    Mean = rep(NA_real_, m)
+                    )
+
+for(i in 1:m) {
+  stats[i, N := epc[!is.na(get(stats[i, Variable])), .N]]
+  stats[i, Min := min(epc[, get(stats[i, Variable])], na.rm = TRUE)]
+  stats[i, Max := max(epc[, get(stats[i, Variable])], na.rm = TRUE)]
+  stats[i, Mean := round(mean(epc[, get(stats[i, Variable])], na.rm = TRUE), 2)]
+  stats[i, SD := round(sd(epc[, get(stats[i, Variable])], na.rm = TRUE), 2)]
+}
+
+
+
+# Tables
+
+## epc_fields
+epc_fields[, position := NULL]
+colnames(epc_fields) <- c("variable", "n unique values", "class", "example")
+epc_fields <- my.flex(epc_fields)
+
+
+## summary_short
+colnames(summary_short) <- c("variable", "value", "number", "percent")
+summary_short <- my.flex(summary_short)
+
+## stats
+colnames(stats) <- c("variable", "n", "min", "max", "mean", "standard deviation")
+stats <- my.flex(stats)
+
+```
+
+# Introduction
+
+This document describes the England and Wales Energy Performance Certificate (EPC) data collected for SERL participants, stored in the file *"SERL_EPC_data_v2020_07.csv"*. The data contains `r ncol_epc` columns and `r nrow_epc` rows (one row per participant with available EPC data). This document lists the EPC variables available along with basic information about the values for each variable such as number of unique values and statistics for numerical variables. A guide to the variables is available [here](https://epc.opendatacommunities.org/docs/guidance#glossary_domestic).
+
+A few variables have been added to the EPC data since the data were collected (largely in October 2019, a few individual households had data retrieved later), and these will be made available in future SERL data releases. Data were collected with the Domestic Energy Performance Certificates API using the house and postcode (details [here](https://epc.opendatacommunities.org/docs/api/domestic)).  
+
+The data have not been modified from the original source except for the removal of address data (replaced with our PUPRN used in the other datasets).
+
+# Data summary
+
+Table 1 lists all variables currently available in the SERL EPC dataset. The number of unique values is given, alongside the R data class and an example value from the dataset. 
+
+`r tab_caps("epc_fields")`
+```{r}
+epc_fields
+```
+
+For variables with fewer than 10 unique values in the EPC dataset, Table 2 shows the number of records with each value and the percent with this value (or non-value in the case of N/A or 'NO DATA!' etc.). We also include PUPRN to show the number of records. 
+
+`r tab_caps("summary_short")`
+```{r}
+summary_short
+```
+
+Table 3 provides basic summary statistics for numeric variables. The column 'n' shows the number of values that were possible to include in the statistics (N/A and similar responses are excluded).
+
+`r tab_caps("stats")`
+```{r}
+stats
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

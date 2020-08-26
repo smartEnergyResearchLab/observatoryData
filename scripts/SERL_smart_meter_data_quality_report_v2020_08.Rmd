@@ -1,7 +1,5 @@
 ---
-title: "Smart meter consumption data: Data quality report"
-author: "Ellen Webborn"
-date: "`r format(Sys.time(), '%d/%m/%Y')`"
+title: "Smart meter consumption data:  \nData quality report"
 output: 
   word_document:
     reference_doc: SERL_word_template_landscape1.docx
@@ -23,7 +21,7 @@ library(ggplot2)
 library(cowplot)
 library(scales)
 
-load_table_data <- TRUE
+load_table_data <- FALSE
 make_plots <- TRUE
 
 # Define plotting/reporting variables for the markdown output
@@ -71,6 +69,40 @@ if(load_table_data == FALSE) {
 ```
 
 ```{r functions, include = FALSE}
+
+create.info.table <- function(creation_date,
+                              vers = "01",
+                              auth = "Ellen Webborn",
+                              proj = "Smart Energy Research Lab (SERL)",
+                              org = "University College London (UCL)",
+                              col_widths = c(1.2, 3)) {
+  it <- data.table(
+    attributes = c(
+      "Creation date",
+      "Version",
+      "Author",
+      "Project",
+      "Organisation"
+    ),
+    info = c(creation_date,
+             vers,
+             auth,
+             proj,
+             org)
+  )
+  
+  itf <- flextable(it)
+  for (i in 1:ncol(it)) {
+    itf <- width(itf, j = i, width = col_widths[i])
+  }
+  
+  itf <- delete_part(x = itf,
+                     part = "header")
+  
+  itf <- border_remove(itf)
+}
+
+
 fill.table.meter.exists <-
   function(device, schedule, participant_data) {
     length(unique(participant_data[deviceType == device &
@@ -140,25 +172,15 @@ plot.monthly.summary <- function(summary_data,
 
 
 ```{r docInfoTable, include = FALSE}
-info.tab <- data.table(
-  attributes = c("Creation date",
-                 "Version",
-                 "Author",
-                 "Project",
-                 "Organisation"),
-  info = c(
-    "2020-08-21",
-    "01",
-    "Ellen Webborn",
-    "Smart Energy Research Lab (SERL)",
-    "University College London (UCL)")
-)
+
+info_tab <- create.info.table(creation_date = "2020-08-25")
 
 ```
 
 ```{r}
-kable(info.tab)
+info_tab
 ```
+
 
 ```{r captions, include = FALSE}
 
@@ -389,13 +411,13 @@ hh_ex_over_time <- plot_grid(monthly_plots[[6]],
 
 
 fig_caps(name = "daily_over_time", 
-         caption = "For daily reads: number of participants in the SERL Observatory with at least 95% of data available and valid, by month.")
+         caption = "Number of participants in the SERL Observatory with at least 95% of daily data available and valid, by month.")
 
 fig_caps(name = "hh_im_over_time", 
-         caption = "For half-hourly import reads: number of participants in the SERL Observatory with at least 95% of data available and valid, by month.")
+         caption = "Number of participants in the SERL Observatory with at least 95% of half-hourly import data available and valid, by month.")
 
 fig_caps(name = "hh_ex_over_time", 
-         caption = "For half-hourly export reads: number of participants in the SERL Observatory with at least 95% of data available and valid, by month.")
+         caption = "Number of participants in the SERL Observatory with at least 95% of half-hourly export data available and valid, by month.")
 
 ```
 
@@ -420,6 +442,7 @@ hh_im_over_time
 ```{r fig.width = fig.w * 0.7, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
 hh_ex_over_time
 ```
+
 
 # Errors
 
@@ -853,7 +876,7 @@ fig_caps(name = "f.d.gas.imp.reduced",
 
 
 `r fig_caps("f.hh.elec.act.imp.reduced")`
-```{r fig.width = fig.w * 0.8, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
 f.hh.elec.act.imp.reduced
 ```
 
@@ -862,7 +885,7 @@ f.hh.elec.act.imp.reduced
 Figure 2 excludes readings equal to 0 because there are so many that the rest of the plot is difficult to see. There is still a spike of very low reads, as we would expect from times with low light such as during winter.
 
 `r fig_caps("f.hh.elec.act.exp.reduced")`
-```{r fig.width = fig.w * 0.8, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
 f.hh.elec.act.exp.reduced
 ```
 
@@ -871,7 +894,7 @@ f.hh.elec.act.exp.reduced
 Gas usage is much higher than electricity usage as it is the most common source of heating in the UK. Therefore Figure 3 reports values in kWh rather than Wh. Note that gas data are recorded in m3 and converted into an estimate for kWh. Since the median half-hourly gas read is 0, 0 reads have been excluded from Figure 3 in order for the rest of the figure to be clearly visible.
 
 `r fig_caps("f.hh.gas.imp.reduced")`
-```{r fig.width = fig.w * 0.8, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
 f.hh.gas.imp.reduced
 ```
 
@@ -883,7 +906,7 @@ f.hh.gas.imp.reduced
 While most of the distribution takes the expected shape for this type of data, there is a significant spike at 0. This could be a read error that has not yet been investigated, or some houses may have been left unoccupied for full days (however all electronic-consuming devices including fridges and freezers would need to have been switched off). It has not yet been determined whether this is the result of a few houses with zero read data for many days or many houses with a few days with zero reads.
 
 `r fig_caps("f.d.elec.act.imp.reduced")`
-```{r fig.width = fig.w * 0.8, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
 f.d.elec.act.imp.reduced
 ```
 
@@ -892,7 +915,7 @@ f.d.elec.act.imp.reduced
 The daily gas import read distribution looks approximately as we would expect. There is a large spike at 0 where heating is not used for a day.
 
 `r fig_caps("f.d.gas.imp.reduced")`
-```{r fig.width = fig.w * 0.8, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
 f.d.gas.imp.reduced
 ```
 
