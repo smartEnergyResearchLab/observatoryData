@@ -2,7 +2,7 @@
 #  August 2018 - July 2020 as part of the August 2020 SERL Observatory 
 #  data release. 
 
-# Code developed by Ellen Webborn, UCL using R version 3.6.0 (2019-08-11)
+# Code developed by Ellen Webborn, UCL using R version 3.6.0 (2019-09-01)
 
 
 # Setup -------------------------------------------------------------------
@@ -12,38 +12,43 @@ library(data.table)
 library(lubridate)
 library(stringr)
 
+source("get.serl.filename.R")
+
+
+
 # Define Input Variables --------------------------------------------------
 save_data <- FALSE
 remove_orig <- TRUE
 
-hh_file_location <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/Observatory2020_08/Original/"
-daily_file_location <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/Observatory2020_08/Original/"
+release_version <- "2020_08"
+survey_version <- "01"
+collection_end_date <- ymd("2020-07-31")
 
-# Names for saving
-daily_file_format_removed <- "SERL_smart_meter_daily_v2020_08"
-hh_file_format_removed <- "SERL_smart_meter_hh_v2020_08"
-rt_file_format_removed <- "SERL_smart_meter_rt_summary_v2020_08"
-pp_summary_file_format_removed <- "SERL_participant_summary_v2020_08"
-saving_location <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/Observatory2020_08/Processed/"
+main_folder <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/Observatory2020_08/"
 
-## Smart meter data 
+
+## Input data
 
 ### Half-hourly
 raw_hh <- "Half-Hourly Readings Aug2018-Jul2020.csv"
-                 
-### Daily
 raw_daily <- "Daily Readings Aug2018-Jul2020.csv"
 
-
-## Auxilliary files
-theoretical_dates_file <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/Observatory2020_08/Original/actualStart_20_08_10.csv"
-
-collection_end_date <- ymd("2020-07-31")
-
+### Auxilliary files
+theoretical_dates_file <- paste(main_folder, "/Original/actualStart_20_08_10.csv", sep = "")
 survey_file <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Pilot_survey/pilot_survey_data_1675.RData"
 participant_details_file <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/SERL Participants Data 2020-07-09 EW Edit.csv"
 EPC_file <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/SERL EPC Data.csv"
 inventory_file <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Inventory/Monthly Inventory Data 2020-08-03.csv"
+
+### Filenames and locations
+location_processed <- paste(main_folder, "Processed/")
+location_orig <- paste(main_folder, "Original/", sep = "")
+
+daily_saving_name <- get.serl.filename("daily_data", release_version)
+hh_saving_name <- get.serl.filename("hh_data", release_version)
+rt_saving_name <- get.serl.filename("rt_data", release_version)
+pp_summary_saving_name <- get.serl.filename("ps_data", release_version)
+
 
 
 # Error codes -------------------------------------------------------------
@@ -944,19 +949,20 @@ setnames(inventory, old = "puprn", new = "PUPRN")
 
 participant_details <- fread(participant_details_file)
 
-readDates <- determine.theoretical.read.dates(theoretical_dates_file, 
-                                             inventory,
-                                             participant_details,
-                                             collection_end_date)
+readDates <-
+  determine.theoretical.read.dates(theoretical_dates_file,
+                                   inventory,
+                                   participant_details,
+                                   collection_end_date)
 
-  ptm <- proc.time()
-  hh_orig <- import.and.rbind(raw_hh, hh_file_location)
-  proc.time() - ptm # 91 seconds elapsed
+ptm <- proc.time()
+hh_orig <- import.and.rbind(raw_hh, sm_file_location)
+proc.time() - ptm # 91 seconds elapsed
 
 
-  ptm <- proc.time()
-  daily_orig <- import.and.rbind(raw_daily, daily_file_location)
-  proc.time() - ptm # 4 seconds elapsed
+ptm <- proc.time()
+daily_orig <- import.and.rbind(raw_daily, sm_file_location)
+proc.time() - ptm # 4 seconds elapsed
 
 # deal with integer-64 in hh data (replace 64-bit equivalent of 16777215 with 32-bit version)
 hh <- copy(hh_orig)
@@ -1018,22 +1024,22 @@ daily <- reorder.sm.cols(daily, "daily")
 if(save_data == TRUE) {
   ptm <- proc.time()
   fwrite(hh, 
-         file = paste(saving_location, hh_file_format_removed, ".csv", sep =  ""))
+         file = paste(location_processed, hh_saving_name, ".csv", sep =  ""))
   proc.time() - ptm # 43.75 seconds elapsed
   
   ptm <- proc.time()
   fwrite(daily, 
-         file = paste(saving_location, daily_file_format_removed, ".csv", sep =  ""))
+         file = paste(location_processed, daily_saving_name, ".csv", sep =  ""))
   proc.time() - ptm # 1.28 seconds elapsed
   
   ptm <- proc.time()
   save(hh, 
-       file = paste(saving_location, hh_file_format_removed, ".RData", sep = ""))
+       file = paste(location_processed, hh_saving_name, ".RData", sep = ""))
   proc.time() - ptm # 474.3 seconds elapsed
   
   ptm <- proc.time()
   save(daily, 
-       file = paste(saving_location, daily_file_format_removed, ".RData", sep = ""))
+       file = paste(location_processed, daily_saving_name, ".RData", sep = ""))
   proc.time() - ptm # 9.82 seconds elapsed
 }
 
@@ -1067,12 +1073,12 @@ rt_summary <- reorder.rt_summary.cols(rt_summary)
 if(save_data == TRUE) {
   ptm <- proc.time()
   fwrite(rt_summary, 
-         file = paste(saving_location, rt_file_format_removed, ".csv", sep =  ""))
+         file = paste(location_processed, rt_saving_name, ".csv", sep =  ""))
   proc.time() - ptm # 0.2 seconds elapsed
   
   ptm <- proc.time()
   save(rt_summary, 
-       file = paste(saving_location, rt_file_format_removed, ".RData", sep = ""))
+       file = paste(location_processed, rt_saving_name, ".RData", sep = ""))
   proc.time() - ptm # 0.2 seconds elapsed
 }
 
@@ -1092,12 +1098,12 @@ proc.time() - ptm # 1.2 seconds elapsed
 if(save_data == TRUE) {
   ptm <- proc.time()
   fwrite(participant_summary, 
-         file = paste(saving_location, pp_summary_file_format_removed, ".csv", sep =  ""))
+         file = paste(location_processed, pp_summary_saving_name, ".csv", sep =  ""))
   proc.time() - ptm # 0.06 seconds elapsed
   
   ptm <- proc.time()
   save(participant_summary, 
-       file = paste(saving_location, pp_summary_file_format_removed, ".RData", sep =  ""))
+       file = paste(location_processed, pp_summary_saving_name, ".RData", sep =  ""))
   proc.time() - ptm # 0.08 seconds elapsed
 }
 proc.time() - startTime

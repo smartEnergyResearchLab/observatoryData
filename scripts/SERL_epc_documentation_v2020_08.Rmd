@@ -16,58 +16,30 @@ library(knitr)
 library(captioner)
 library(flextable)
 
-
-
-fig_caps <- captioner(prefix = "Figure")
-tab_caps <- captioner(prefix = "Table")
+source("get.serl.filename.R")
+source("create.info.table.R")
 
 ```
 
 ```{r defineInputs, include=FALSE}
+
+release_version <- "2020_08"
+release_date <- "2020-08"
 
 load_epc <- FALSE # FALSE if using previously saved .RData
 write_epc <- FALSE # TRUE if we want to save a new csv data file
 
 epc_folder <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/EPC data/"
 epc_loading_filename <- "SERL EPC Data.csv"
-saving_location <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/JulyStaticDataset/"
-epc_saving_filename <- "SERL_EPC_data_v2020_07"
+saving_location <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/Observatory2020_08/Processed/"
+epc_saving_filename <- get.serl.filename("epc_data", release_version)
+
+fig_caps <- captioner(prefix = "Figure")
+tab_caps <- captioner(prefix = "Table")
 
 ```
 
 ```{r functions, include = FALSE}
-
-create.info.table <- function(creation_date,
-                              vers = "01",
-                              auth = "Ellen Webborn",
-                              proj = "Smart Energy Research Lab (SERL)",
-                              org = "University College London (UCL)",
-                              col_widths = c(1.2, 3)) {
-  it <- data.table(
-    attributes = c(
-      "Creation date",
-      "Version",
-      "Author",
-      "Project",
-      "Organisation"
-    ),
-    info = c(creation_date,
-             vers,
-             auth,
-             proj,
-             org)
-  )
-  
-  itf <- flextable(it)
-  for (i in 1:ncol(it)) {
-    itf <- width(itf, j = i, width = col_widths[i])
-  }
-  
-  itf <- delete_part(x = itf,
-                     part = "header")
-  
-  itf <- border_remove(itf)
-}
 
 
 get.cases <- function(i, d = epc) {
@@ -122,8 +94,7 @@ if(write_epc == TRUE) {
 
 ```{r docInfoTable, include = FALSE}
 
-info_tab <- create.info.table(creation_date = "2020-08-27",
-                              vers = "Data version 2020-07")
+info_tab <- create.info.table()
 
 ```
 

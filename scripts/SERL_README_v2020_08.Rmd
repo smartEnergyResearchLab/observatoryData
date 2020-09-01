@@ -1,8 +1,8 @@
 ---
-title: "Smart meter consumption data:  \nTechnical documentation"
+title: "SERL data and documentation:  \nReadme"
 output: 
   word_document:
-    reference_doc: SERL_word_template_landscape1.docx
+    reference_doc: SERL_word_template_portrait1.docx
     toc: yes
 ---
 
@@ -19,6 +19,14 @@ library(lubridate)
 library(flextable)
 library(officer)
 
+source("get.serl.filename.R")
+source("create.info.table.R")
+
+```
+
+```{r defineInputs, include = FALSE}
+
+# onboarding and offboarding data
 
 load_table_data <- TRUE # TRUE if we've run this file before and don't want to re-process the data (only edit the text, formatting, etc.)
 
@@ -33,61 +41,7 @@ geom.text.size <- 5
 
 ```
 
-```{r defineInputs, include = FALSE}
-collection_end_date <- ymd("2020-07-31")
-min_n_to_determine_unit_error <- 30
-sm_processing_filename <- "SERL_smart_meter_data_processing_v2020_08.R"
-
-# Copied from smart meter data processing file
-daily_file_format_removed <- "SERL_smart_meter_daily_v2020_08"
-hh_file_format_removed <- "SERL_smart_meter_hh_v2020_08"
-rt_file_format_removed <- "SERL_smart_meter_rt_summary_v2020_08"
-pp_summary_file_format_removed <- "SERL_participant_summary_v2020_08"
-saving_location <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/Observatory2020_08/Processed/"
-
-if(load_table_data == FALSE) {
-  load(paste(saving_location, daily_file_format_removed, ".RData", sep = ""))
-  load(paste(saving_location, hh_file_format_removed, ".RData", sep = ""))
-  load(paste(saving_location, rt_file_format_removed, ".RData", sep = ""))
-  load(paste(saving_location, pp_summary_file_format_removed, ".RData", sep = ""))
-} else {
-  load(paste(saving_location, "sm_data_documentation_input.RData", sep = ""))
-}
-```
-
 ```{r functions, include = FALSE}
-
-create.info.table <- function(creation_date,
-                              vers = "01",
-                              auth = "Ellen Webborn",
-                              proj = "Smart Energy Research Lab (SERL)",
-                              org = "University College London (UCL)",
-                              col_widths = c(1.2, 3)) {
-  it <- data.table(
-    attributes = c(
-      "Creation date",
-      "Version",
-      "Author",
-      "Project",
-      "Organisation"
-    ),
-    info = c(creation_date,
-             vers,
-             auth,
-             proj,
-             org)
-  )
-  
-  itf <- flextable(it)
-  for (i in 1:ncol(it)) {
-    itf <- width(itf, j = i, width = col_widths[i])
-  }
-  
-  itf <- delete_part(x = itf,
-                     part = "header")
-  
-  itf <- border_remove(itf)
-}
 
 my.flex <- function(t, autofit = TRUE) {
   ft <- flextable(t)
@@ -133,34 +87,11 @@ add.simple.table.superscript <- function(flex_table,
 ```
 
 ```{r keyNumbers, include = FALSE}
-if(load_table_data == FALSE) {
-  first_read_date_hh <- rt_summary[readType != "DL", 
-                                   min(firstValidReadDate, na.rm = TRUE)] # "DL" = Daily Log
-  last_read_date_hh <- rt_summary[readType != "DL", 
-                                  max(lastValidReadDate, na.rm = TRUE)]
-  rt_summary[, min(firstValidReadDate, na.rm = TRUE)]
-  n_hh_p <- length(unique(hh$PUPRN))
-  nrow_hh <- nrow(hh)
-  ncol_hh <- ncol(hh)
 
-  first_read_date_d <- rt_summary[readType == "DL", 
-                                  min(firstValidReadDate, na.rm = TRUE)]
-  last_read_date_d <- rt_summary[readType == "DL", 
-                                 max(lastValidReadDate, na.rm = TRUE)]
-  n_d_p <- length(unique(daily$PUPRN))
-  nrow_d <- nrow(daily)
-  ncol_d <- ncol(daily)
-  
-  nrow_reads <- nrow(rt_summary)
-  ncol_reads <- ncol(rt_summary)
-  
-  nrow_pp <- nrow(participant_summary)
-  ncol_pp <- ncol(participant_summary)
-}
 ```
 
 ```{r docInfoTable, include = FALSE}
-info_tab <- create.info.table(creation_date = "2020-08-28")
+info_tab <- create.info.table()
 ```
 
 ```{r}
@@ -169,26 +100,8 @@ info_tab
 
 ```{r captions, include = FALSE}
 
-tab_caps(name = "read.type.tab", 
-         caption = "Smart meter data types, defined by 'deviceType' and 'readType'. ")
-
-tab_caps(name = "hh.cols.tab", 
-         caption = "Half-hourly data fields. Error flags are defined in the Error Flags section below.")
-
-tab_caps(name = "d.cols.tab", 
-         caption = "Daily data fields. See the Error Flags section below for definitions of the error flags used in this table.")
-
-tab_caps("relevant.flags", 
-         caption = "Error flags and their meanings.") 
-
-tab_caps("sum.match.tab", 
-         caption = "Electricity and gas 'sum_match' values and their meanings.")
-
-tab_caps("sched.tab", 
-         caption = "Read-type data quality summary: data fields. Error codes are explained above in the Error Flags section.")
-
-tab_caps("partic.tab", 
-         caption = "Participant data quality summary: data fields")
+tab_caps(name = "", 
+         caption = "")
 
 ```
 

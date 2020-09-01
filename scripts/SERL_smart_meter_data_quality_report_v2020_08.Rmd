@@ -20,7 +20,26 @@ library(ggplot2)
 library(cowplot)
 library(scales)
 
-load_table_data <- FALSE
+source("get.serl.filename.R")
+source("create.info.table.R")
+
+# Set figure defaults
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, dpi = 300)
+
+```
+
+```{r defineInputs, include = FALSE}
+
+load_table_data <- FALSE # TRUE if importing data already created by this file
+
+release_version <- "2020_08"
+release_date <- "2020-08"
+
+collection_end_date <- ymd("2020-07-31")
+
+location_processed <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/Observatory2020_08/Processed/"
+
+min_n_to_determine_unit_error <- 30
 
 # Define plotting/reporting variables for the markdown output
 fig.h <- 5.5
@@ -33,67 +52,36 @@ title.size <- 14
 geom.text.size <- 5
 dcp <- 2 # number of decimal places for rounding 
 
-# Set figure defaults
-knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, dpi = 300)
-
 ```
 
-```{r defineInputs, include = FALSE}
-collection_end_date <- ymd("2020-05-31")
-min_n_to_determine_unit_error <- 30
-sm_processing_filename <- "SERL_smart_meter_data_processing_v2020_07.R"
-
-# Copied from smart meter data processing file
-daily_file_format_removed <- "SERL_smart_meter_daily_v2020_08"
-hh_file_format_removed <- "SERL_smart_meter_hh_v2020_08"
-rt_file_format_removed <- "SERL_smart_meter_rt_summary_v2020_08"
-pp_summary_file_format_removed <- "SERL_participant_summary_v2020_08"
-saving_location <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/Observatory2020_08/Processed/"
-
+```{r loadData, include = FALSE}
 if(load_table_data == FALSE) {
-  load(paste(saving_location, daily_file_format_removed, ".RData", sep = ""))
-  load(paste(saving_location, hh_file_format_removed, ".RData", sep = ""))
-  load(paste(saving_location, rt_file_format_removed, ".RData", sep = ""))
-  load(paste(saving_location, pp_summary_file_format_removed, ".RData", sep = ""))
+  load(paste(location_processed, 
+             get.serl.filename("daily_data", release_version),
+             ".RData", 
+             sep = "")
+       )
+  load(paste(location_processed, 
+             get.serl.filename("hh_data", release_version),
+             ".RData", 
+             sep = "")
+       )
+  load(paste(location_processed, 
+             get.serl.filename("rt_data", release_version),
+             ".RData", 
+             sep = "")
+       )
+  load(paste(location_processed, 
+             get.serl.filename("ps_data", release_version),
+             ".RData", 
+             sep = "")
+       )
 } else {
-  load(paste(saving_location, "DQ_input.RData", sep = ""))
+  load(paste(location_processed, "DQ_input.RData", sep = ""))
 }
 ```
 
 ```{r functions, include = FALSE}
-
-create.info.table <- function(creation_date,
-                              vers = "01",
-                              auth = "Ellen Webborn",
-                              proj = "Smart Energy Research Lab (SERL)",
-                              org = "University College London (UCL)",
-                              col_widths = c(1.2, 3)) {
-  it <- data.table(
-    attributes = c(
-      "Creation date",
-      "Version",
-      "Author",
-      "Project",
-      "Organisation"
-    ),
-    info = c(creation_date,
-             vers,
-             auth,
-             proj,
-             org)
-  )
-  
-  itf <- flextable(it)
-  for (i in 1:ncol(it)) {
-    itf <- width(itf, j = i, width = col_widths[i])
-  }
-  
-  itf <- delete_part(x = itf,
-                     part = "header")
-  
-  itf <- border_remove(itf)
-}
-
 
 fill.table.meter.exists <-
   function(device, schedule, participant_data) {
@@ -172,7 +160,7 @@ summarise.by.month <- function(dt = hh,
 
 
 ```{r docInfoTable, include = FALSE}
-info_tab <- create.info.table(creation_date = "2020-08-25")
+info_tab <- create.info.table()
 ```
 
 ```{r}
@@ -937,7 +925,7 @@ if(load_table_data == FALSE) {
     n_id,
     summaries,
     monthly_plots,
-    file = paste(saving_location, "DQ_input.RData", sep = "")
+    file = paste(location_processed, "DQ_input.RData", sep = "")
   )
 }
 
