@@ -8,7 +8,6 @@ output:
 
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE)
 
 # load relevant libraries
 library(data.table)
@@ -22,10 +21,9 @@ library(cowplot)
 library(scales)
 
 load_table_data <- FALSE
-make_plots <- TRUE
 
 # Define plotting/reporting variables for the markdown output
-fig.h <- 6
+fig.h <- 5.5
 fig.w <- 10
 fullwidth <- TRUE
 fig_caps <- captioner(prefix = "Figure")
@@ -35,14 +33,8 @@ title.size <- 14
 geom.text.size <- 5
 dcp <- 2 # number of decimal places for rounding 
 
-
-rd <- function(x, d = dcp){
-  # Round to d decimal places and print to the full number of places, even if it ends in 0
-  # x is a vector
-  # Recommend setting dcp (decimal places) at the start of a document
-  format(round(x, digits = d), nsmall = d)
-}
-
+# Set figure defaults
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, dpi = 300)
 
 ```
 
@@ -128,21 +120,14 @@ my.flex <- function(t, autofit = FALSE) {
   return(ft)
 }
 
-summarise.by.month <- function(dt = hh, 
-                               flag_name = "Elec_act_imp_flag",
-                               half_hourly_data = TRUE) {
-  by_pp <- dt[get(flag_name) == 1, .N,
-              by = .(PUPRN,
-                     year(Read_date_effective),
-                     month(Read_date_effective),
-                     d_in_m)]
-  by_pp[, poss := d_in_m * (1 + half_hourly_data * 47)]
-  by_pp[, perc := N / d_in_m * 100]
-  
-  summary_by_month <- by_pp[perc > 95, .N, keyby = .(year, month)]
-  summary_by_month[, month2 := as.Date(paste0("2000-", month, "-01"), "%Y-%m-%d")]
-  return(summary_by_month)
+rd <- function(x, d = dcp){
+  # Round to d decimal places and print to the full number of places, even if it ends in 0
+  # x is a vector
+  # Recommend setting dcp (decimal places) at the start of a document
+  format(round(x, digits = d), nsmall = d)
 }
+
+
 
 plot.monthly.summary <- function(summary_data, 
                                  plot_title,
@@ -167,14 +152,27 @@ plot.monthly.summary <- function(summary_data,
 }
 
 
+summarise.by.month <- function(dt = hh, 
+                               flag_name = "Elec_act_imp_flag",
+                               half_hourly_data = TRUE) {
+  by_pp <- dt[get(flag_name) == 1, .N,
+              by = .(PUPRN,
+                     year(Read_date_effective),
+                     month(Read_date_effective),
+                     d_in_m)]
+  by_pp[, poss := d_in_m * (1 + half_hourly_data * 47)]
+  by_pp[, perc := N / d_in_m * 100]
+  
+  summary_by_month <- by_pp[perc > 95, .N, keyby = .(year, month)]
+  summary_by_month[, month2 := as.Date(paste0("2000-", month, "-01"), "%Y-%m-%d")]
+  return(summary_by_month)
+}
 
 ```
 
 
 ```{r docInfoTable, include = FALSE}
-
 info_tab <- create.info.table(creation_date = "2020-08-25")
-
 ```
 
 ```{r}
@@ -182,7 +180,7 @@ info_tab
 ```
 
 
-```{r captions, include = FALSE}
+```{r tableCaptions, include = FALSE}
 
 tab_caps(name = "t.avail.summary.N", caption = "Number of participants with different minimum levels of valid import ('im') and export ('ex') readings.")
 
@@ -195,7 +193,6 @@ tab_caps(name = "t.hh.reactive.flag", caption = "Half-hourly electricity reactiv
 tab_caps(name = "t.hh.gas.flag", caption = "Half-hourly gas import readings: number and percent of readings with each error flag.")
 
 tab_caps(name = "t.daily.flag", caption = "Daily electricity active import readings and daily gas import readings: number and percent of readings with each error flag.")
-
 
 tab_caps(name = "t.stats", caption = "Read statistics for valid readings of each type.")
 
@@ -423,23 +420,23 @@ fig_caps(name = "hh_ex_over_time",
 
 ## Number of participants with data over time
 
-The following figures show how many participants have at least 95% of a each month's data available and flagged as valid. A participant's earliest read date depends on the date they signed up (we can collect up to 1 year of historic data from consent date ( 3 months for export data)), when their SMETS2 meter was installed (or upgraded if SMETS1), and when they moved into the house (if they moved in within the year preceding sign up). 
+The following figures show how many participants have at least 95% of a each month's data available and flagged as valid. A participant's earliest read date depends on the date they signed up (we can collect up to 1 year of historic data from consent date (3 months for export data)), when their SMETS2 meter was installed (or upgraded if SMETS1), and when they moved into the house (if they moved in within the year preceding sign up). 
 
 
 `r fig_caps("daily_over_time")`
-```{r fig.width = fig.w * 0.7, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+```{r fig.width = fig.w * 0.7}
 daily_over_time
 ```
 
 
 `r fig_caps("hh_im_over_time")`
-```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+```{r}
 hh_im_over_time
 ```
 
 
 `r fig_caps("hh_ex_over_time")`
-```{r fig.width = fig.w * 0.7, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+```{r fig.width = fig.w * 0.7}
 hh_ex_over_time
 ```
 
@@ -798,14 +795,6 @@ The electricity active import reads form a distribution with a shape that is typ
 ```{r byParticipantPlots, include = FALSE}
 
 if(load_table_data == FALSE) {
-  
-  # Elec
-  # f.hh.elec <- ggplot(hh[Elec_act_imp_flag == 1], aes(Elec_act_imp_hh_Wh)) + 
-  # geom_histogram(aes(y = ..density..), binwidth = 50) + 
-  # labs(x = "Valid half-hourly electricity active import readings (Wh)") +
-  # theme(text = element_text(size = font.size))
-  # fig_caps(name = "f.hh.elec", 
-  #          caption = "Histogram of half-hourly electricity active import readings, excluding those flagged as errors. Full range shown, bin width = 50 Wh.")
 
 n_points <- 2000000  
 # half-hourly  
@@ -876,7 +865,7 @@ fig_caps(name = "f.d.gas.imp.reduced",
 
 
 `r fig_caps("f.hh.elec.act.imp.reduced")`
-```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+```{r}
 f.hh.elec.act.imp.reduced
 ```
 
@@ -885,7 +874,7 @@ f.hh.elec.act.imp.reduced
 Figure 2 excludes readings equal to 0 because there are so many that the rest of the plot is difficult to see. There is still a spike of very low reads, as we would expect from times with low light such as during winter.
 
 `r fig_caps("f.hh.elec.act.exp.reduced")`
-```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+```{r fig.width = fig.w * 0.6, fig.height = fig.h * 0.8}
 f.hh.elec.act.exp.reduced
 ```
 
@@ -894,7 +883,7 @@ f.hh.elec.act.exp.reduced
 Gas usage is much higher than electricity usage as it is the most common source of heating in the UK. Therefore Figure 3 reports values in kWh rather than Wh. Note that gas data are recorded in m3 and converted into an estimate for kWh. Since the median half-hourly gas read is 0, 0 reads have been excluded from Figure 3 in order for the rest of the figure to be clearly visible.
 
 `r fig_caps("f.hh.gas.imp.reduced")`
-```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+```{r fig.width = fig.w * 0.6, fig.height = fig.h * 0.8}
 f.hh.gas.imp.reduced
 ```
 
@@ -906,7 +895,7 @@ f.hh.gas.imp.reduced
 While most of the distribution takes the expected shape for this type of data, there is a significant spike at 0. This could be a read error that has not yet been investigated, or some houses may have been left unoccupied for full days (however all electronic-consuming devices including fridges and freezers would need to have been switched off). It has not yet been determined whether this is the result of a few houses with zero read data for many days or many houses with a few days with zero reads.
 
 `r fig_caps("f.d.elec.act.imp.reduced")`
-```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+```{r fig.width = fig.w * 0.6, fig.height = fig.h * 0.8}
 f.d.elec.act.imp.reduced
 ```
 
@@ -915,7 +904,7 @@ f.d.elec.act.imp.reduced
 The daily gas import read distribution looks approximately as we would expect. There is a large spike at 0 where heating is not used for a day.
 
 `r fig_caps("f.d.gas.imp.reduced")`
-```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+```{r fig.width = fig.w * 0.6, fig.height = fig.h * 0.8}
 f.d.gas.imp.reduced
 ```
 

@@ -1,5 +1,5 @@
 ---
-title: "EPC data: technical documentation"
+title: "EPC data:  \ntechnical documentation"
 output: 
   word_document:
     reference_doc: SERL_word_template_portrait1.docx
@@ -36,6 +36,39 @@ epc_saving_filename <- "SERL_EPC_data_v2020_07"
 ```
 
 ```{r functions, include = FALSE}
+
+create.info.table <- function(creation_date,
+                              vers = "01",
+                              auth = "Ellen Webborn",
+                              proj = "Smart Energy Research Lab (SERL)",
+                              org = "University College London (UCL)",
+                              col_widths = c(1.2, 3)) {
+  it <- data.table(
+    attributes = c(
+      "Creation date",
+      "Version",
+      "Author",
+      "Project",
+      "Organisation"
+    ),
+    info = c(creation_date,
+             vers,
+             auth,
+             proj,
+             org)
+  )
+  
+  itf <- flextable(it)
+  for (i in 1:ncol(it)) {
+    itf <- width(itf, j = i, width = col_widths[i])
+  }
+  
+  itf <- delete_part(x = itf,
+                     part = "header")
+  
+  itf <- border_remove(itf)
+}
+
 
 get.cases <- function(i, d = epc) {
   v <- colnames(d)[i]
@@ -86,26 +119,19 @@ if(write_epc == TRUE) {
 
 ```
 
+
 ```{r docInfoTable, include = FALSE}
-info.tab <- data.table(
-  attributes = c("Creation date",
-                 "Data version",
-                 "Author",
-                 "Project",
-                 "Organisation"),
-  info = c(
-    "2020-08-22",
-    "2020-07",
-    "Ellen Webborn",
-    "Smart Energy Research Lab (SERL)",
-    "University College London (UCL)")
-)
+
+info_tab <- create.info.table(creation_date = "2020-08-27",
+                              vers = "Data version 2020-07")
 
 ```
 
 ```{r}
-kable(info.tab)
+info_tab
 ```
+
+
 
 ```{r captions, include = FALSE}
 
@@ -116,7 +142,7 @@ tab_caps(name = "summary_short",
          caption = "The number and percent of each value found in the dataset for each variable with fewer than 10 unique values found.")
 
 tab_caps(name = "stats", 
-         caption = "Basic statistcs for integer and numeric variables. 'n' is the number of values used in the calculations (i.e. the non-NA values).")
+         caption = "Basic statistics for integer and numeric variables. 'n' is the number of values used in the calculations (i.e. the non-NA values).")
 
 ```
 
@@ -245,9 +271,9 @@ stats <- my.flex(stats)
 
 This document describes the England and Wales Energy Performance Certificate (EPC) data collected for SERL participants, stored in the file *"SERL_EPC_data_v2020_07.csv"*. The data contains `r ncol_epc` columns and `r nrow_epc` rows (one row per participant with available EPC data). This document lists the EPC variables available along with basic information about the values for each variable such as number of unique values and statistics for numerical variables. A guide to the variables is available [here](https://epc.opendatacommunities.org/docs/guidance#glossary_domestic).
 
-A few variables have been added to the EPC data since the data were collected (largely in October 2019, a few individual households had data retrieved later), and these will be made available in future SERL data releases. Data were collected with the Domestic Energy Performance Certificates API using the house and postcode (details [here](https://epc.opendatacommunities.org/docs/api/domestic)).  
+A few variables have been added to the EPC data since the data were collected (largely in October 2019, a few individual households had data retrieved later), and these will be made available in future SERL data releases. Data were collected with the Domestic Energy Performance Certificates API using the house number and postcode (details [here](https://epc.opendatacommunities.org/docs/api/domestic)).  
 
-The data have not been modified from the original source except for the removal of address data (replaced with our PUPRN used in the other datasets).
+The data have not been modified from the original source except for the removal of address data (replaced with our PUPRN (a unique identifier) used in the other datasets).
 
 # Data summary
 

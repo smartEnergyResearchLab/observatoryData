@@ -160,9 +160,7 @@ if(load_table_data == FALSE) {
 ```
 
 ```{r docInfoTable, include = FALSE}
-
-info_tab <- create.info.table(creation_date = "2020-08-25")
-
+info_tab <- create.info.table(creation_date = "2020-08-28")
 ```
 
 ```{r}
@@ -203,7 +201,7 @@ This document describes the half-hourly and daily datasets available to research
 
 - **SERL_smart_meter_hh_{version}.csv**: half-hourly electricity and gas readings with some additional derived columns (note that this dataset also includes reactive readings and export readings where available)
 
-- **SERL_smart_meter_read_type_summary_{version}.csv**: data quality summary for each read type for each participant (such as number of errors found by type) and basic read statistics (such as mean and maximum)
+- **SERL_smart_meter_rt_summary_{version}.csv**: data quality summary for each read type for each participant (such as number of errors found by type) and basic read statistics (such as mean and maximum)
 
 - **SERL_participant_summary_{version}.csv**: data quality summary for each participant (less detail than the read-type summary data, but also including basic participant information such as region and number of questions answered on the survey)
 
@@ -308,7 +306,7 @@ if (load_table_data == FALSE) {
                    example = "1VUXXXF1")]
   
   hh.cols.tab[columnNames == "Read_date_time",
-              `:=`(description = "Time read taken",
+              `:=`(description = "Time read taken (UTC)",
                    units = "%Y-%m-%d %H:%M:%S",
                    example = "2019-11-02 00:00:00")]
   
@@ -448,7 +446,7 @@ if(load_table_data == FALSE) {
                                                     units = "%Y-%m-%d",
                                                     example = "2019-11-01")]
   
-  d.cols.tab[columnNames == "Read_date_time", `:=`(description = "Time and date of read",
+  d.cols.tab[columnNames == "Read_date_time", `:=`(description = "Time and date of read (UTC)",
                                                     units = "%Y-%m-%d",
                                                     example = "2019-11-01")]
   
@@ -621,7 +619,7 @@ We discovered that multiple participants have some electricity readings as 16777
 
 ### Readings in the wrong units (error flag -4)
 
-We also discovered that all daily electricity active import readings were all extremely low for some participants. At the time of investiation there were no participants with a maximum read between 85 and 2285 Wh; therefore we determined that any electricity active import (or export) meter with it's highest reading less than 100 was erroneously reporting in kWh rather than in Wh as specified by the Smart Energy Code. Any readings that were deemed to be valid according to all other criteria were given the 'Elec in kWh' error flag and their data were multipled by 1000 in the 'unit-corrected' column. Note that we set a limit of at least `r min_n_to_determine_unit_error` readings in order to define a meter as recording in kWh.
+We also discovered that all daily electricity active import readings were all extremely low for some participants. At the time of investigation there were no participants with a maximum read between 85 and 2285 Wh; therefore we determined that any electricity active import (or export) meter with it's highest reading less than 100 was erroneously reporting in kWh rather than in Wh as specified by the Smart Energy Code. Any readings that were deemed to be valid according to all other criteria were given the 'Elec in kWh' error flag and their data were multipled by 1000 in the 'unit-corrected' column. Note that we set a limit of at least `r min_n_to_determine_unit_error` readings in order to define a meter as recording in kWh.
 
 
 ## Flags for the daily and half-hourly sum match
@@ -746,7 +744,7 @@ A read type is a combination of device type and schedule type, such as daily act
   sched.tab[columnNames == "firstValidReadDate",
             `:=`(description = "Earliest date with a valid read (error code 1)",
                  units = "%Y-%m-%d",
-                 example = "2018-11-029")]
+                 example = "2018-11-26")]
   
   sched.tab[columnNames == "lastValidReadDate",
             `:=`(description = "Latest date with a valid read (error code 1)",

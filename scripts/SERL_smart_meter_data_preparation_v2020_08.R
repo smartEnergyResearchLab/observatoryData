@@ -41,7 +41,7 @@ theoretical_dates_file <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data
 collection_end_date <- ymd("2020-07-31")
 
 survey_file <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Pilot_survey/pilot_survey_data_1675.RData"
-participant_details_file <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/SERL Participants Data 2020-07-09.csv"
+participant_details_file <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/SERL Participants Data 2020-07-09 EW Edit.csv"
 EPC_file <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/SERL EPC Data.csv"
 inventory_file <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Inventory/Monthly Inventory Data 2020-08-03.csv"
 
@@ -943,7 +943,6 @@ inventory <- fread(inventory_file)
 setnames(inventory, old = "puprn", new = "PUPRN")
 
 participant_details <- fread(participant_details_file)
-participant_details[PUPRN == "WWTCLHJ1", WoC_CoT_effective_date := "22/11/2019"]
 
 readDates <- determine.theoretical.read.dates(theoretical_dates_file, 
                                              inventory,
