@@ -16,7 +16,25 @@
 
 
 get.serl.filename <- function(file_identifier, version_id) {
+  # Valid file identifiers
   
+  ## climate_data
+  ## climate_doc
+  ## epc_doc
+  ## epc_data
+  ## sm_doc
+  ## sm_code
+  ## sm_dq_report
+  ## hh_data
+  ## daily_data
+  ## rt_data
+  ## ps_data
+  ## survey_doc
+  ## survey_code
+  ## survey_data
+  ## survey_questions
+  ## readme
+
   if(file_identifier == "climate_data") {
     name <- "climate_data"
   } else if(file_identifier == "climate_doc") {
@@ -45,6 +63,8 @@ get.serl.filename <- function(file_identifier, version_id) {
     name <- "survey_data_prep"
   } else if(file_identifier == "survey_data") {
     name <- "survey_data"
+  } else if(file_identifier == "survey_questions") {
+    name <- "survey_questions"    
   } else if(file_identifier == "readme") {
     name <- "readme"
   } else {print("Incorrect file identifier")}

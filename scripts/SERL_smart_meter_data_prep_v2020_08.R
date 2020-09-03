@@ -12,7 +12,7 @@ library(data.table)
 library(lubridate)
 library(stringr)
 
-source("get.serl.filename.R")
+source("scripts/get.serl.filename.R")
 
 
 
@@ -956,12 +956,12 @@ readDates <-
                                    collection_end_date)
 
 ptm <- proc.time()
-hh_orig <- import.and.rbind(raw_hh, sm_file_location)
+hh_orig <- import.and.rbind(raw_hh, location_orig)
 proc.time() - ptm # 91 seconds elapsed
 
 
 ptm <- proc.time()
-daily_orig <- import.and.rbind(raw_daily, sm_file_location)
+daily_orig <- import.and.rbind(raw_daily, location_orig)
 proc.time() - ptm # 4 seconds elapsed
 
 # deal with integer-64 in hh data (replace 64-bit equivalent of 16777215 with 32-bit version)

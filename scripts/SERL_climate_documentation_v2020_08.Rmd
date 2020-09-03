@@ -15,8 +15,8 @@ library(lubridate)
 library(knitr)
 library(captioner)
 
-source("get.serl.filename.R")
-source("create.info.table.R")
+source("scripts/get.serl.filename.R")
+source("scripts/create.info.table.R")
 
 ```
 

@@ -1,0 +1,2524 @@
+---
+title: "Survey responses"
+author: "Ellen Webborn"
+date: "`r format(Sys.time(), '%d/%m/%Y')`"
+output:
+  word_document: 
+    reference_doc: SERL_word_template2.docx
+    toc: yes
+
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(data.table)
+library(tidyverse)
+library(knitr)
+library(captioner)
+library(flextable)
+library(officer)
+
+#load("S:/ENERGINST_EaB_Project_17_SMRP/Data/Pilot_survey/pilot_survey_data_886.RData")
+#load("S:/ENERGINST_EaB_Project_17_SMRP/Data/Pilot_survey/pilot_survey_data_1497.RData")
+#load("S:/ENERGINST_EaB_Project_17_SMRP/Data/Pilot_survey/pilot_survey_data_1675.RData")
+load("S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/survey_data_for_markdown.RData")
+
+
+# remove some blank survey responses
+nParticipants <- nrow(survey_reordered)
+# Plotting/report variables
+fig.h <- 6
+fig.w <- 10
+fullwidth <- TRUE
+fig_caps <- captioner(prefix = "Figure")
+tab_caps <- captioner(prefix = "Table")
+font.size <- 18
+geom.text.size <- 5
+
+dcp <- 1 # round to 1 decimal place
+```
+
+```{r functionDefinitions, include = FALSE}
+
+rd <- function(x, d = dcp){
+  format(round(x, digits = d), nsmall = d)
+}
+
+sum.positive <- function(x){
+  # x is a vector (or similar) of elements to be added (if positive)
+  sum(sapply(x, function(y) max(y, 0)))
+}
+
+fill.comparison.data <- function(dt = survey_counts,
+                                 V = studyV, ext_S = ext_source, 
+                                 real_resp = resp_real,
+                                 ext_resp = resp_vals, ext_perc = resp_perc) {
+  # fill in % for pilot study
+  dt[Variable == V & Source == "Pilot Survey", Percent := round(Count/nParticipants * 100, 2)]
+  
+  #browser()
+  
+  # fill in percent of answered for pilot study
+  dt <- pct.real.responses(dt, V, "Pilot Survey", real_resp)
+  
+  #browser()
+  
+  # add in comparison data
+  dt <- fill.external.percentages(dt, V, ext_S, ext_resp, ext_perc)
+
+  #browser()
+  
+  # fill in percent of answered for comparison data
+  dt <- pct.real.responses(dt, V, ext_S, resp_real)
+}
+
+pct.real.responses <- function(dt2, V, source_name, valid_response = c(1,2,3,4,5)) {
+  # gets the percentage of actual responses in survey_counts (excluding non-response, 'cannot do this' etc)
+  tot <- dt2[Variable == V & Source == source_name & Value %in% valid_response, sum(Percent)]
+  dt2[Variable == V & Source == source_name & Value %in% valid_response, 
+                PercentOfAnswered := round(Percent / tot * 100, 2)]
+}
+
+
+fill.external.percentages <- function(dt2, V, source_name, response_values, percentages) {
+  ext_input <- data.table(Value = response_values, y = percentages)
+  setkey(ext_input, Value)
+  dt.tmp <- dt2[Variable == V & Source == "Pilot Survey",]
+  dt.tmp[, ':='(Count = NA, Percent = NA_real_, PercentOfAnswered = NA_real_, Source = source_name)]
+  setkey(dt.tmp, Value)
+  #browser()
+  dt.tmp2 <- ext_input[dt.tmp]
+  dt.tmp2[, `:=`(Percent = y, y = NULL)]
+  dt2 <- rbind(dt2, dt.tmp2)
+}
+
+plot.survey.data <- function(onlyPercentOfAnswered = FALSE, 
+                             compare = FALSE,
+                             selectPercentOfAnswered = resp_real,
+                             d = survey_counts, 
+                             v = studyV,
+                             label_angle = 45) {
+  if(onlyPercentOfAnswered == TRUE & compare == TRUE) {
+    p <- ggplot(data = d[Variable == v & Value %in% selectPercentOfAnswered], 
+                aes(x = reorder(Label, Value), y = PercentOfAnswered, 
+                    fill = factor(Source, levels = c("Pilot Survey", 
+                                                     sort(unique(d[Variable == v & Source != "Pilot Survey", Source]))
+                                                     )))) + 
+      geom_bar(stat = "identity", position = position_dodge()) + 
+      geom_text(aes(label = Count), vjust = -0.3, position = position_dodge(0.9), size = geom.text.size) +
+      theme(axis.text.x = element_text(angle = label_angle, hjust = label_angle*0.5/45+0.5)) +
+      labs(x = "Response", y = "Percent of those who answered", fill = "Source") +
+      theme(text = element_text(size = font.size))
+  } else if(onlyPercentOfAnswered == TRUE & compare == FALSE) {
+    p <- ggplot(data = d[Variable == v & Value %in% selectPercentOfAnswered], 
+                aes(x = reorder(Label, Value), y = PercentOfAnswered)) + 
+      geom_bar(stat = "identity", position = position_dodge(), fill = "steelblue") + 
+      geom_text(aes(label = Count), vjust = -0.3, size = geom.text.size) +
+      theme(axis.text.x = element_text(angle = label_angle, hjust = label_angle*0.5/45+0.5)) +
+      labs(x = "Response", y = "Percent of those who answered") +
+     theme(text = element_text(size = font.size))
+  } else if(onlyPercentOfAnswered == FALSE & compare == TRUE) {
+    p <- ggplot(data = d[Variable == v], 
+                aes(x = reorder(Label, Value), y = Percent, 
+                    fill = factor(Source, levels = c("Pilot Survey", 
+                                                     sort(unique(d[Variable == v & Source != "Pilot Survey", Source]))
+                                                     )))) + 
+      geom_bar(stat = "identity", position = position_dodge()) + 
+      geom_text(aes(label = Count), vjust = -0.3, position = position_dodge(0.9), size = geom.text.size) +
+      theme(axis.text.x = element_text(angle = label_angle, hjust = label_angle*0.5/45+0.5)) +
+      labs(x = "Response", fill = "Source") +
+      theme(text = element_text(size = font.size))
+  } else if(onlyPercentOfAnswered == FALSE & compare == FALSE) {
+    p <- ggplot(data = d[Variable == v], 
+                aes(x = reorder(Label, Value), y = Percent)) + 
+      geom_bar(stat = "identity", position = position_dodge(), fill = "steelblue") + 
+      geom_text(aes(label = Count), vjust = -0.3, size = geom.text.size) +
+      theme(axis.text.x = element_text(angle = label_angle, hjust = label_angle*0.5/45+0.5)) +
+      labs(x = "Response") +
+    theme(text = element_text(size = font.size))
+  } else {
+    p <- NA
+    warning(paste("incorrect inputs to plotting function for variable ", studyV, sep = ""))
+  }
+}
+
+calc.PercOfQ.ans <- function(x, a, q.dat, quintile.tots) {
+  #b <- 0
+  if(length(q.dat[is.na(get(a)), N]) == 0) {
+    y <- q.dat[x,N] / quintile.tots[IMD_quintile == q.dat[x, IMD_quintile], N] * 100
+    #b <- 1
+    } else {
+      y <- (q.dat[x,N] / (quintile.tots[IMD_quintile == q.dat[x, IMD_quintile], N] - 
+                                            q.dat[is.na(get(a)) & IMD_quintile == q.dat[x, IMD_quintile], N]) * 100)
+      #b <- 2
+    }
+  #browser()
+  return(y)
+  }
+
+plot.by.quintile <- function(q = "B1", s = "2011 Census", vals = list(1, c(4,5,6), 2, 3), 
+                             x.axis.label = "Type of Accommodation", s.supplied = 0, p.supplied = 0,
+                             label_angle = 45) {
+  # set up basic variables
+  a <- paste(q, "_agg", sep = "")
+  n.cat <- length(vals)
+  quintile.tots <- survey_reordered[, .N, keyby = IMD_quintile]
+  # get the subset of quintile data and add column for percent of the quintile answered
+  q.dat <- survey_reordered[, .N, keyby = c(a, "IMD_quintile")]
+  q.dat[, PercOfQ.ans := sapply(1:nrow(q.dat), calc.PercOfQ.ans, a = a, q.dat = q.dat, 
+                                quintile.tots = quintile.tots)]
+  
+  # q.dat[, PercOfQ.ans := sapply(1:nrow(q.dat), function(x) {
+  #                           if(length(q.dat[is.na(get(a)), N] == 0)) {
+  #                             return(q.dat[x,N] / quintile.tots[IMD_quintile == q.dat[x, IMD_quintile], N] * 100)
+  #                           } else {
+  #                             return(q.dat[x,N] / (quintile.tots[IMD_quintile == q.dat[x, IMD_quintile], N] - 
+  #                                           q.dat[is.na(get(a)) & IMD_quintile == q.dat[x, IMD_quintile], N]) * 100)
+  #                           }
+  #   })]
+  
+  # get the relevant source data if not supplied
+  if(length(s.supplied == 1) & s.supplied[1] == 0) {
+    s.dat <- sapply(1:n.cat, function(x) survey_counts[Variable == q & Source == s & Value %in% vals[[x]],
+                                                     sum(Percent)])
+  } else {
+    s.dat <- s.supplied
+  }
+    # get the pilot survey data (not broken down by quintile)
+  if(length(p.supplied == 1) & p.supplied[1] == 0) {
+    p.dat <- sapply(1:n.cat, function(x) survey_counts[Variable == q & Source == "Pilot Survey" & 
+                                                       Value %in% vals[[x]], sum(PercentOfAnswered)])
+  } else {
+    p.dat  <- p.supplied
+  }
+    
+  # set up the plot
+  output.plot <- ggplot(data = q.dat[!is.na(get(a))], aes(x = get(a), y = PercOfQ.ans, group = IMD_quintile, 
+                                              fill = as.factor(IMD_quintile))) +
+    geom_bar(stat = "identity", position = position_dodge()) + 
+    theme(axis.text.x = element_text(angle = label_angle, hjust = label_angle*0.5/45+0.5)) +
+    labs(x = x.axis.label, y = "Percent of Quintile", fill = "IMD Quintile")  +
+    scale_fill_brewer(palette = "RdYlBu") +
+    theme(text = element_text(size = font.size))
+  # add the line segments for source and overall data
+  for(i in 1:n.cat) {
+    output.plot <- output.plot + geom_segment(x = i - 0.5, y = s.dat[i], 
+                                                  xend = i + 0.5, yend = s.dat[i], 
+                                              color = "black") +
+      geom_segment(x = i - 0.5, y = p.dat[i], 
+                       xend = i + 0.5, yend = p.dat[i],
+                   color = "blue", linetype = "dashed")
+  }
+  return(output.plot)
+}
+
+
+
+calc.PercOfI.ans <- function(x, a, q.dat, incentive.tots) {
+  #b <- 0
+  #browser()
+  if(length(q.dat[is.na(get(a)), N]) == 0) {
+    y <- q.dat[x,N] / incentive.tots[Incentive == q.dat[x, Incentive], N] * 100
+    #b <- 1
+    } else {
+      y <- (q.dat[x,N] / (incentive.tots[Incentive == q.dat[x, Incentive], N] - 
+                                            q.dat[is.na(get(a)) & Incentive == q.dat[x, Incentive], N]) * 100)
+      #b <- 2
+    }
+  #browser()
+  return(y)
+  }
+
+plot.by.incentive <- function(q = "B1", s = "2011 Census", vals = list(1, c(4,5,6), 2, 3), 
+                             x.axis.label = "Type of Accommodation", s.supplied = 0, p.supplied = 0,
+                             label_angle = 45) {
+  # set up basic variables
+  a <- paste(q, "_agg", sep = "")
+  n.cat <- length(vals)
+  incentive.tots <- survey_reordered[, .N, keyby = Incentive]
+  # get the subset of incentive data and add column for percent of the incentive answered
+  q.dat <- survey_reordered[, .N, keyby = c(a, "Incentive")]
+  #browser()
+  q.dat[, PercOfQ.ans := sapply(1:nrow(q.dat), calc.PercOfI.ans, a = a, q.dat = q.dat, 
+                                incentive.tots = incentive.tots)]
+
+  # get the relevant source data if not supplied
+  if(length(s.supplied == 1) & s.supplied[1] == 0) {
+    s.dat <- sapply(1:n.cat, function(x) survey_counts[Variable == q & Source == s & Value %in% vals[[x]],
+                                                     sum(Percent)])
+  } else {
+    s.dat <- s.supplied
+  }
+    # get the pilot survey data (not broken down by incentive)
+  if(length(p.supplied == 1) & p.supplied[1] == 0) {
+    p.dat <- sapply(1:n.cat, function(x) survey_counts[Variable == q & Source == "Pilot Survey" & 
+                                                       Value %in% vals[[x]], sum(PercentOfAnswered)])
+  } else {
+    p.dat  <- p.supplied
+  }
+  #browser()  
+  # set up the plot
+  output.plot <- ggplot(data = q.dat[!is.na(get(a))], aes(x = get(a), y = PercOfQ.ans, group = Incentive, 
+                                              fill = as.factor(Incentive))) +
+    geom_bar(stat = "identity", position = position_dodge()) + 
+    theme(axis.text.x = element_text(angle = label_angle, hjust = label_angle*0.5/45+0.5)) +
+    labs(x = x.axis.label, y = "Percent of Incentive", fill = "Incentive")  +
+    scale_fill_brewer(palette = "RdYlBu") +
+    theme(text = element_text(size = font.size))
+  # add the line segments for source and overall data
+  for(i in 1:n.cat) {
+    output.plot <- output.plot + geom_segment(x = i - 0.5, y = s.dat[i], 
+                                                  xend = i + 0.5, yend = s.dat[i], 
+                                              color = "black") +
+      geom_segment(x = i - 0.5, y = p.dat[i], 
+                       xend = i + 0.5, yend = p.dat[i],
+                   color = "blue", linetype = "dashed")
+  }
+  return(output.plot)
+}
+
+
+calc.PercOfP.ans <- function(x, a, q.dat, postal.tots) {
+  #b <- 0
+  #browser()
+  if(length(q.dat[is.na(get(a)), N]) == 0) {
+    y <- q.dat[x,N] / postal.tots[Postal == q.dat[x, Postal], N] * 100
+    #b <- 1
+    } else {
+      y <- (q.dat[x,N] / (postal.tots[Postal == q.dat[x, Postal], N] - 
+                                            q.dat[is.na(get(a)) & Postal == q.dat[x, Postal], N]) * 100)
+      #b <- 2
+    }
+  #browser()
+  return(y)
+  }
+
+plot.by.postal <- function(q = "B1", s = "2011 Census", vals = list(1, c(4,5,6), 2, 3), 
+                             x.axis.label = "Type of Accommodation", s.supplied = 0, p.supplied = 0,
+                           label_angle = 45) {
+  # set up basic variables
+  a <- paste(q, "_agg", sep = "")
+  n.cat <- length(vals)
+  postal.tots <- survey_reordered[, .N, keyby = Postal]
+  # get the subset of postal data and add column for percent of the postal answered
+  q.dat <- survey_reordered[, .N, keyby = c(a, "Postal")]
+  #browser()
+  q.dat[, PercOfQ.ans := sapply(1:nrow(q.dat), calc.PercOfP.ans, a = a, q.dat = q.dat, 
+                                postal.tots = postal.tots)]
+
+  # get the relevant source data if not supplied
+  if(length(s.supplied == 1) & s.supplied[1] == 0) {
+    s.dat <- sapply(1:n.cat, function(x) survey_counts[Variable == q & Source == s & Value %in% vals[[x]],
+                                                     sum(Percent)])
+  } else {
+    s.dat <- s.supplied
+  }
+    # get the pilot survey data (not broken down by postal)
+  if(length(p.supplied == 1) & p.supplied[1] == 0) {
+    p.dat <- sapply(1:n.cat, function(x) survey_counts[Variable == q & Source == "Pilot Survey" & 
+                                                       Value %in% vals[[x]], sum(PercentOfAnswered)])
+  } else {
+    p.dat  <- p.supplied
+  }
+  #browser()  
+  # set up the plot
+  output.plot <- ggplot(data = q.dat[!is.na(get(a))], aes(x = get(a), y = PercOfQ.ans, group = Postal, 
+                                              fill = as.factor(Postal))) +
+    geom_bar(stat = "identity", position = position_dodge()) + 
+    theme(axis.text.x = element_text(angle = label_angle, hjust = label_angle*0.5/45+0.5)) +
+    labs(x = x.axis.label, y = "Percent of Postal", fill = "Postal")  +
+    scale_fill_brewer(palette = "RdYlBu") +
+    theme(text = element_text(size = font.size))
+  # add the line segments for source and overall data
+  for(i in 1:n.cat) {
+    output.plot <- output.plot + geom_segment(x = i - 0.5, y = s.dat[i], 
+                                                  xend = i + 0.5, yend = s.dat[i], 
+                                              color = "black") +
+      geom_segment(x = i - 0.5, y = p.dat[i], 
+                       xend = i + 0.5, yend = p.dat[i],
+                   color = "blue", linetype = "dashed")
+  }
+  return(output.plot)
+}
+
+
+
+calc.PercOfM.ans <- function(x, a, q.dat, mailing.tots) {
+  if(length(q.dat[is.na(get(a)), N]) == 0) {
+    y <- q.dat[x,N] / mailing.tots[Mailing == q.dat[x, Mailing], N] * 100
+    } else {
+      y <- (q.dat[x,N] / (mailing.tots[Mailing == q.dat[x, Mailing], N] - 
+                                            q.dat[is.na(get(a)) & Mailing == q.dat[x, Mailing], N]) * 100)
+    }
+  return(y)
+  }
+
+plot.by.mailing <- function(q = "B1", s = "2011 Census", vals = list(1, c(4,5,6), 2, 3), 
+                             x.axis.label = "Type of Accommodation", s.supplied = 0, p.supplied = 0,
+                            label_angle = 45) {
+  # set up basic variables
+  a <- paste(q, "_agg", sep = "")
+  n.cat <- length(vals)
+  mailing.tots <- survey_reordered[, .N, keyby = Mailing]
+  # get the subset of mailing data and add column for percent of the mailing answered
+  q.dat <- survey_reordered[, .N, keyby = c(a, "Mailing")]
+  #browser()
+  q.dat[, PercOfQ.ans := sapply(1:nrow(q.dat), calc.PercOfM.ans, a = a, q.dat = q.dat, 
+                                mailing.tots = mailing.tots)]
+
+  # get the relevant source data if not supplied
+  if(length(s.supplied == 1) & s.supplied[1] == 0) {
+    s.dat <- sapply(1:n.cat, function(x) survey_counts[Variable == q & Source == s & Value %in% vals[[x]],
+                                                     sum(Percent)])
+  } else {
+    s.dat <- s.supplied
+  }
+    # get the pilot survey data (not broken down by mailing)
+  if(length(p.supplied == 1) & p.supplied[1] == 0) {
+    p.dat <- sapply(1:n.cat, function(x) survey_counts[Variable == q & Source == "Pilot Survey" & 
+                                                       Value %in% vals[[x]], sum(PercentOfAnswered)])
+  } else {
+    p.dat  <- p.supplied
+  }
+  #browser()  
+  # set up the plot
+  output.plot <- ggplot(data = q.dat[!is.na(get(a))], aes(x = get(a), y = PercOfQ.ans, group = Mailing, 
+                                              fill = as.factor(Mailing))) +
+    geom_bar(stat = "identity", position = position_dodge()) + 
+    theme(axis.text.x = element_text(angle = label_angle, hjust = label_angle*0.5/45+0.5)) +
+    labs(x = x.axis.label, y = "Percent of Mailing", fill = "Mailing")  +
+    scale_fill_brewer(palette = "RdYlBu") +
+    theme(text = element_text(size = font.size))
+  # add the line segments for source and overall data
+  for(i in 1:n.cat) {
+    output.plot <- output.plot + geom_segment(x = i - 0.5, y = s.dat[i], 
+                                                  xend = i + 0.5, yend = s.dat[i], 
+                                              color = "black") +
+      geom_segment(x = i - 0.5, y = p.dat[i], 
+                       xend = i + 0.5, yend = p.dat[i],
+                   color = "blue", linetype = "dashed")
+  }
+  return(output.plot)
+}
+
+setup.sig.test <- function(treatment_type = "Incentive", 
+                           treatment = c("None", "Voucher", "Thermometer"), 
+                           bars = c("Detached", "Flat, maisonette or apartment", 
+                                    "Semi-detached", "Terraced"), 
+                           variable = "B1") {
+  #v <- paste(variable, "_agg", sep = "")
+  tmp <- survey_reordered[, .N, by = .(get(v), get(treatment_type))]
+  
+  z <- matrix(nrow = length(treatment), ncol = length(bars))
+  for(i in 1:length(treatment)) {
+    for(j in 1:length(bars)) {
+      z[i,j] <- tmp[get == bars[j] & get.1 == treatment[i], N]
+    }
+  }
+  
+  z2 <- as.table(z)
+  dimnames(z2) <- list(treatment, bars)
+  z2
+}
+
+my.flex <- function(t) {
+  ft <- flextable(t)
+  ft <- theme_booktabs(ft)
+  ft <- autofit(ft)
+}
+
+
+```
+
+```{r docInfoTable, include = FALSE}
+info.tab <- data.table(
+  attributes = c("Creation date",
+                 "Version",
+                 "Author",
+                 "Project",
+                 "Organisation"),
+  info = c(
+    "2020-05-18",
+    "01",
+    "Ellen Webborn",
+    "Smart Energy Research Lab (SERL)",
+    "University College London (UCL)")
+)
+
+```
+
+```{r}
+kable(info.tab)
+```
+
+
+```{r createMainTable, include = FALSE}
+
+# Turn into a long table to make it easier to work with
+id.variables <- c("PUPRN", "Cell", "Region", "IMD_quintile", "LSOA")
+long_survey_reordered <- melt(survey_reordered, id.vars = id.variables, na.rm = TRUE)
+
+# Issue that survey responses are not all integers according to the questions doc, but they are in the data
+#sort(unique(survey_questions$Value))
+survey_questions[, Value.tmp := Value]
+survey_questions[, Value := as.integer(Value.tmp)]
+survey_questions[Value.tmp == "-1.00a", Value := -1]
+survey_questions[Value.tmp == "-1a", Value := -1]
+survey_questions[Value.tmp == "-2.00a", Value := -2]
+survey_questions[Value.tmp == "-2a", Value := -2]
+survey_questions[Value.tmp == "-3a", Value := -3]
+survey_questions[Value.tmp == "-9.00a", Value := -9]
+survey_questions[Value.tmp == "-9a", Value := -9]
+#sort(unique(survey_questions$Value))
+survey_questions[, Value.tmp := NULL]
+
+# Create table for representativeness comparisons
+survey_counts <- long_survey_reordered[, .N, by = c("variable", "value")]
+colnames(survey_counts) <- c("Variable", "Value", "Count")
+survey_counts[, Value := as.integer(Value)]
+
+survey_counts <- survey_counts[survey_questions[, c("Variable", "Value", "Label")], on = c("Variable", "Value")]
+survey_counts[is.na(Count) == TRUE, Count := 0]
+
+survey_counts[, Source := "Pilot Survey"]
+survey_counts[, Percent := NA_real_]
+survey_counts[, PercentOfAnswered := NA_real_]
+
+nParticipants <- nrow(survey_reordered)
+
+```
+
+```{r sectionAQuestions, include = FALSE}
+#### A1 *Before we contacted you about this study, did you know you had a smart meter? ####
+
+studyV <- "A1"  
+resp_real <- c(1,2)
+survey_counts[Variable == studyV & Source == "Pilot Survey", Percent := round(Count/nParticipants * 100, 2)]
+survey_counts <- pct.real.responses(survey_counts, studyV, "Pilot Survey", resp_real)
+
+#### A2 To what extend (if at all) has having a SM affected your energy use (approx wording) ####
+
+studyV <- "A2"
+resp_real <- c(-1, 1:4)
+survey_counts[Variable == "A2" & Value == -1, Label := "Don't know"]
+survey_counts[Variable == studyV & Source == "Pilot Survey", Percent := round(Count/nParticipants * 100, 2)]
+
+p.a2 <- plot.survey.data(onlyPercentOfAnswered = FALSE, compare = FALSE)
+
+#### A3 Type of central heating ####
+ # With this we want to combine sub-variables into something usable. 
+studyV <- "A3"
+
+tmp.counts <- c()
+for(i in 1:9) {
+  tmp.counts <- c(tmp.counts, survey_counts[Variable == paste("A30", i, sep = "") & Value == 1, Count])
+}
+tmp.counts <- c(tmp.counts, survey_counts[Variable == "A310" & Value == 1, Count])
+
+tmp <- data.table(Variable = rep(as.factor("A3"), 10),
+                  Value = 1:10,
+                  Count = tmp.counts, 
+                  Label = c("No central heating", "Gas e.g. gas boiler", "Electric storage heaters", "Electric radiators", "Other electric e.g. heat pump", "Oil", "Solid fuel e.g. wood or coal", "Biomass for boiler", "District/community heating", "Other"),
+                  Source = rep("Pilot Survey", 10),
+                  Percent = rep(NA_real_,10),
+                  PercentOfAnswered = rep(NA_real_,10))
+
+tmp[, Percent := round(Count/nParticipants * 100, 2)]
+
+survey_counts <- rbind(survey_counts, tmp)
+
+p.a3 <- plot.survey.data(onlyPercentOfAnswered = FALSE, compare = FALSE)
+p.a3 <- p.a3 + scale_x_discrete(labels = c("No central heating", 
+                                           "Gas e.g. gas boiler",
+                                           "Electric \nstorage heaters",
+                                           "Electric radiators",
+                                           "Other electric \ne.g. heat pump",
+                                           "Oil",
+                                           "Solid fuel \ne.g. wood or coal",
+                                           "Biomass for boiler",
+                                           "District/community \nheating",
+                                           "Other"))
+
+
+#### A4: Which, if any, of the following controls does your central heating system have? ####
+ # With this we want to combine sub-variables into something usable. 
+studyV <- "A4"
+n.resp <- 6
+
+tmp.counts <- c()
+for(i in 1:n.resp) {
+  tmp.counts <- c(tmp.counts, survey_counts[Variable == paste("A40", i, sep = "") & Value == 1, Count])
+}
+
+tmp <- data.table(Variable = rep(as.factor(studyV), n.resp),
+                  Value = 1:n.resp,
+                  Count = tmp.counts, 
+                  Label = c("Timer", "Temperature setting", "Smart device", "Only manual on/off switch", "None of these", "Don't know"),
+                  Source = rep("Pilot Survey", n.resp),
+                  Percent = rep(NA_real_,n.resp),
+                  PercentOfAnswered = rep(NA_real_,n.resp))
+
+tmp[, Percent := round(Count/nParticipants * 100, 2)]
+
+survey_counts <- rbind(survey_counts, tmp)
+
+p.a4 <- plot.survey.data(onlyPercentOfAnswered = FALSE, compare = FALSE, 
+                         label_angle = 0) + 
+  scale_x_discrete(labels = c("Timer", "Temperature \nsetting", "Smart \ndevice",
+                                "Only manual \non/off switch", "None \nof these",
+                                "Don't \nknow"))
+
+#### A8 How often are these heaters used in cold weather? ####
+studyV <- "A8"
+resp_real <- c(-1, 1:5)
+survey_counts[Variable == studyV & Value == -1, Label := "Don't know"]
+survey_counts[Variable == studyV & Value == 3, Label := "Rarely - only if I/we really have to"]
+survey_counts[Variable == studyV & Value == 5, Label := "Varies - depends on temperature or other reasons"]
+
+survey_counts[Variable == studyV, Percent := round(Count/nParticipants * 100, 2)]
+survey_counts <- pct.real.responses(survey_counts, studyV, "Pilot Survey", resp_real)
+
+p.a8 <- plot.survey.data(onlyPercentOfAnswered = TRUE, compare = FALSE, selectPercentOfAnswered = resp_real)
+p.a8 <- p.a8 + 
+  scale_x_discrete(labels = c("Don't know", "Daily", "Most days", 
+                                "Rarely-only if I/we \nreally have to", "Never",
+                                "Varies-depends \non temperature \nor other reasons"))
+
+#### A9 Reasons for adjusting heating ####
+studyV <- "A9"
+n.resp <- 8
+
+tmp.counts <- c()
+for(i in 1:(n.resp-1)) {
+  tmp.counts <- c(tmp.counts, survey_counts[Variable == paste("A90", i, sep = "") & Value == 1, Count])
+}
+tmp.counts <- c(long_survey_reordered[variable == "A9_sum" & value == 0, .N], tmp.counts)
+
+
+tmp <- data.table(Variable = rep(as.factor(studyV), n.resp),
+                  Value = 0:(n.resp-1),
+                  Count = tmp.counts, 
+                  Label = c("No answer", "When it is especially cold", "Becausae of children/infants/babies", "Visitors",
+                            "Pets", "Illness", "Working at home", "None of these"),
+                  Source = rep("Pilot Survey", n.resp),
+                  Percent = rep(NA_real_,n.resp),
+                  PercentOfAnswered = rep(NA_real_,n.resp))
+
+tmp[, Percent := round(Count/nParticipants * 100, 2)]
+
+survey_counts <- rbind(survey_counts, tmp)
+
+p.a9 <- plot.survey.data(onlyPercentOfAnswered = FALSE, compare = FALSE) +
+  scale_x_discrete(labels = c("No answer", 
+                              "When it is \nespecially cold",
+                              "Because of \nchildren/infants/babies",
+                              "Visitors", "Pets", "Illness",
+                              "Working at home",
+                              "None of these")) + 
+  scale_y_continuous(limits = c(0, 95))
+
+#### A10 ####
+studyV <- "A10"
+resp_real <- c(1:5)
+
+survey_counts[Variable == studyV, Percent := round(Count/nParticipants * 100, 2)]
+survey_counts <- pct.real.responses(survey_counts, studyV, "Pilot Survey", resp_real)
+
+p.a10 <- plot.survey.data(onlyPercentOfAnswered = TRUE, compare = FALSE, label_angle = 0) 
+
+#### A13_01 How often do you switch off lights not being used? ####
+studyV <- "A13_01"
+ext_source <- "USoc Wave 4"
+resp_real <- 1:5
+resp_vals <- c(-2,1,2,3,4,5,6)
+resp_perc <- c(8.55, 58.01, 19.81, 8.45, 3.34, 1.68, 0.16)
+
+survey_counts <- fill.comparison.data()
+
+p.a13_01 <- ggplot(data = survey_counts[Variable == studyV,], 
+       aes(x = reorder(Label, Value), y = Percent, fill = Source)) + 
+  geom_bar(stat = "identity", position = position_dodge()) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(x = "Response") +
+    theme(text = element_text(size = font.size))
+
+p.a13_01 <- plot.survey.data(onlyPercentOfAnswered = TRUE, compare = TRUE, label_angle = 0)
+p.a13_01 <- p.a13_01 + theme(legend.position = c(0.8, 0.8)) +
+  scale_x_discrete(labels = c("Always", "Very\noften", "Quite\noften", "Not very\noften", "Never"))
+#fig_caps(name = "p.a13_01", caption = "How often do you personally switch off lights in rooms that aren't being used?")
+
+#### A13_02 How often do you put more clothes on when you feel cold rather than putting the heating on or turning it up? ####
+
+studyV <- "A13_02"
+ext_source <- "USoc Wave 4"
+resp_real <- 1:5
+resp_vals <- c(-2,1,2,3,4,5,6)
+resp_perc <- c(8.58, 24.72, 23.14, 20.62, 13.53, 8.92, 0.50)
+
+survey_counts <- fill.comparison.data()
+
+p.a13_02 <- plot.survey.data(onlyPercentOfAnswered = TRUE, compare = TRUE, label_angle = 0)
+p.a13_02 <- p.a13_02 + theme(legend.position = c(0.8, 0.8)) +
+  scale_x_discrete(labels = c("Always", "Very\noften", "Quite\noften", "Not very\noften", "Never"))
+#fig_caps(name = "p.a13_02", caption = "How often do you personally put more clothes on when feeling cold rather than putting the heating on or turning it up?")
+
+#### A14 #### 
+
+studyV <- "A14"
+resp_real <- c(-1, 1:4)
+
+survey_counts[Variable == studyV & Value == -1, Label := "Don't know"]
+survey_counts[Variable == studyV, Percent := round(Count/nParticipants * 100, 2)]
+
+survey_counts <- pct.real.responses(survey_counts, studyV, "Pilot Survey", resp_real)
+
+p.a14 <- plot.survey.data(onlyPercentOfAnswered = TRUE, compare = FALSE)
+
+#### A1501 ####
+studyV <- "A1501"
+resp_real <- c(-1, 1:5)
+
+survey_counts[Variable == studyV & Value == -1, Label := "Don't know"]
+survey_counts[Variable == studyV, Percent := round(Count/nParticipants * 100, 2)]
+
+survey_counts <- pct.real.responses(survey_counts, studyV, "Pilot Survey", resp_real)
+
+p.a15_01 <- plot.survey.data(onlyPercentOfAnswered = TRUE, compare = FALSE, 
+                             label_angle = 0) + 
+  scale_x_discrete(labels = c("Don't \nknow", "Always", "Very \noften", "Quite \noften", 
+                   "Not very \noften", "Never"))
+
+#### A1502 ####
+studyV <- "A1502"
+resp_real <- c(-1, 1:5)
+
+survey_counts[Variable == studyV & Value == -1, Label := "Don't know"]
+survey_counts[Variable == studyV, Percent := round(Count/nParticipants * 100, 2)]
+
+survey_counts <- pct.real.responses(survey_counts, studyV, "Pilot Survey", resp_real)
+
+p.a15_02 <- plot.survey.data(onlyPercentOfAnswered = TRUE, compare = FALSE, 
+                             label_angle = 0) + 
+  scale_x_discrete(labels = c("Don't \nknow", "Always", "Very \noften", "Quite \noften", 
+                   "Not very \noften", "Never"))
+
+
+
+```
+
+```{r sectionBQuestions, include = FALSE}
+
+#### B1 What type of accommodation do you live in? ####
+
+studyV <- "B1"
+ext_source <- "2011 Census"
+resp_real <- 1:6
+resp_vals <- c(-2,1,2,3,4,5,6)
+resp_perc <- c(0, 24.28, 29.05, 23.00, 17.59, 4.63, 1.45)
+
+survey_counts[Variable == studyV, Label := c("No answer", "Detached", " Semi-detached", "Terraced", "Flats or tenement",
+                                             "Converted or shared house", "In/over a commercial building")]
+
+survey_counts <- fill.comparison.data()
+
+p.b1 <- plot.survey.data(onlyPercentOfAnswered = TRUE, compare = TRUE, label_angle = 0)
+
+p.b1 <- p.b1 + scale_y_continuous(limits = c(0,40)) +
+  theme(legend.position = c(0.8, 0.8)) +
+  scale_x_discrete(labels = c("Detached", "Semi-\ndetached", "Terraced", "Flats or\ntenement", 
+                              "Converted or\nshared house", "In/over a\ncommercial\nbuilding"))
+
+#fig_caps(name = "p.b1", caption = "Type of accommodation. The numbers above each bar gives the number of participants in our survey who selected the option.")
+
+
+#### B4 Do you (or your household) own or rent this accommodation? ####
+
+studyV <- "B4" # complicated, some data US, some Census
+
+tmp <- data.table(Variable = rep("B4", 2),
+                  Value = c(-5,-6),
+                  Count = c(survey_counts[Variable == "B4" & Value %in% c(1,2), sum(Count)],
+                            survey_counts[Variable == "B4" & Value %in% c(3,4,5), sum(Count)]),
+                  Label = c("Owner (any kind)", "Tenant (any kind)"),
+                  Source = rep("Pilot Survey", 2),
+                  Percent = rep(NA_real_, 2),
+                  PercentOfAnswered = rep(NA_real_, 2)
+                  )
+
+survey_counts <- rbind(survey_counts, tmp)
+
+## Fill Census
+ext_source <- "2011 Census"
+resp_real <- c(-6, -5)
+resp_vals <- c(-6, -5, -2, 1:5)
+resp_perc <- c(35.68, 64.32, 0, NA_real_, NA_real_, NA_real_, 17.09, NA_real_)
+
+survey_counts <- fill.comparison.data()
+
+## Fill Understanding Society (US) 
+ext_source <- "USoc Wave 9"
+resp_real <- c(-6, -5)
+resp_vals <- c(-6, -5, -2, 1:5)
+resp_perc <- c(28.83, 70.29, 0.88, 69.73, 0.56, NA_real_, NA_real_, 0.79)
+
+survey_counts <- fill.external.percentages(survey_counts, studyV, ext_source, resp_vals, resp_perc)
+
+survey_counts <- pct.real.responses(survey_counts, studyV, ext_source, resp_real)
+
+
+## Plot
+
+p.b4 <- plot.survey.data(onlyPercentOfAnswered = TRUE, compare = TRUE, label_angle = 0)
+p.b4 <- p.b4 + theme(legend.position = c(0.15, 0.85)) + 
+  scale_x_discrete(labels = c("Tenant\n(any kind)", "Owner\n(any kind)"))
+
+#fig_caps(name = "p.b4", caption = "Owning versus Renting")
+
+# will want to discuss specific percentages that aren't on the plot, eg social rented vs non-social rented Census. 
+
+
+#### B6 How many rooms are bedrooms? ####
+
+## Free text so have to add in response options
+tmp <- long_survey_reordered[variable == "B6", .N, by = c("variable", "value")]
+colnames(tmp) <- c("Variable", "Value", "Count")
+tmp[, Value := as.numeric(Value)]
+tmp2 <- survey_counts[Variable == "B6",]
+#tmp2[, Value := as.character(Value)]
+tmp3 <- tmp2[tmp, on = c("Value")]
+tmp3[is.na(Label), Label := as.character(Value)]
+tmp3[, `:=`(Variable = i.Variable, Count = i.Count, Source = "Pilot Survey", i.Variable = NULL, i.Count = NULL)]
+#tmp3[Value == "-2", Label := "No answer"]
+tmp3[Value == -2, Label := "No answer"]
+
+survey_counts <- survey_counts[!(Variable == "B6"),]
+survey_counts <- rbind(survey_counts, tmp3)
+#survey_counts[Variable == "B6", Value := as.numeric(Value)] # dealt with earlier
+
+### Deal with Census only going to 5+ (add an extra row for this)
+survey_counts <- rbind(survey_counts, list("B6", 5000, survey_counts[Variable == "B6" & Value >=5, sum(Count, na.rm = TRUE)],
+                                        "5+", "Pilot Survey", NA_real_, NA_real_))
+
+## Comparison
+
+studyV <- "B6"
+ext_source <- "2011 Census"
+resp_real <- c(5000,0,1,2,3,4)
+#Note that 5000 means 5+ bedrooms, now available for both
+resp_vals <- c(5000,-4,-2,0,1,2,3,4,5,6,7)
+resp_perc <- c(4.87,0,0,0,12.53,27.14,40.57,14.88,0,0,0)
+
+survey_counts <- fill.comparison.data()
+
+p.b6 <- plot.survey.data(onlyPercentOfAnswered = TRUE, compare = TRUE, label_angle = 0)
+p.b6 <- p.b6 + theme(legend.position = c(0.8, 0.8))
+#fig_caps(name = "p.b6", caption = "Number of bedrooms")
+
+
+ggplot(data = survey_counts[Variable == studyV & Source == "Pilot Survey" & Value != 5000], 
+       aes(x = Label, y = Count, fill = Source)) + 
+  geom_bar(stat = "identity", position = position_dodge()) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme(text = element_text(size = font.size))
+
+
+#### B7 During the cold winter weather, can you normally keep comfortably warm in your living room? ####
+# Note that the question in USoc was slightly different. 
+
+studyV <- "B7"
+ext_source <- "USoc Wave 8"
+resp_real <- 1:2
+resp_vals <- c(-2,-1,1,2)
+resp_perc <- c(0.31,0.23,95.17,4.29)
+
+survey_counts <- fill.comparison.data()
+
+p.b7 <- ggplot(data = survey_counts[Variable == studyV,], 
+       aes(x = Label, y = Percent, fill = Source)) + 
+  geom_bar(stat = "identity", position = position_dodge()) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme(text = element_text(size = font.size))
+
+#### B8 Do you have any problems with damp, condensation or mould? (comparing with 'Any damp' in EHS) ####
+
+studyV <- "B8"
+ext_source <- "EHS 2017"
+resp_real <- c(-5,1)
+resp_vals <- c(-5,-2,-1,1,2)
+resp_perc <- c(96.2,0,0,3.8,0)
+
+## First need to combine groups No answer, don't know and no:
+combi <- survey_counts[Variable == studyV & Value %in% c(-2,-1,2), sum(Count)]
+survey_counts <- rbind(survey_counts, list("B8", -5, combi, "Not yes", "Pilot Survey", NA_real_, NA_real_))
+
+## Comparison - note that EHS only has yes data, so we don't know about their not answering/don't know
+survey_counts <- fill.comparison.data()
+
+ggplot(data = survey_counts[Variable == studyV & Value %in% resp_real,], 
+       aes(x = Label, y = PercentOfAnswered, fill = Source)) + 
+  geom_bar(stat = "identity", position = position_dodge()) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme(text = element_text(size = font.size))
+
+
+#### B9 When was your accommodation built? Not yet got representative data, but possible? ####
+
+studyV <- "B9"
+survey_counts[Variable == studyV, Percent := round(Count/nParticipants * 100, 2)]
+
+ggplot(survey_counts[Variable == studyV], aes(x = Label, y = Percent)) + 
+  geom_bar(stat = "identity") + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme(text = element_text(size = font.size))
+
+#### B9 ####
+ studyV <- "B9"
+
+ggplot(data = survey_counts[Variable == studyV], 
+       aes(x = Label, y = Count, fill = Source)) + 
+  geom_bar(stat = "identity", position = position_dodge()) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme(text = element_text(size = font.size))
+
+
+#### B10 appliances - probably want to combine, try to find more data. #### 
+
+survey_counts[Variable == "B1009"]
+
+
+```
+
+```{r sectionCQuestions, include = FALSE}
+
+#### C1 how many occupants? ####
+
+studyV <- "C1"
+
+## add responses
+tmp <- long_survey_reordered[variable == "C1_new", .N, by = value]
+tmp.n <- nrow(tmp)
+tmp2 <- data.table(Variable = rep("C1", tmp.n), 
+                   Value = as.numeric(tmp$value),
+                   Count = tmp$N, 
+                   Label = NA_character_,
+                   Source = rep("Pilot Survey", tmp.n),
+                   Percent = NA_real_,
+                   PercentOfAnswered = NA_real_)
+#survey_counts <- rbind(survey_counts[Variable == studyV], tmp2)
+survey_counts <- survey_counts[!(Variable == "C1" & Value == -2)]
+survey_counts <- rbind(survey_counts, tmp2)
+
+survey_counts[Variable == studyV & Value == -2, Label := "No answer"]
+survey_counts[Variable == studyV & Value != -2, Label := as.character(Value)]
+
+## add 6+ option for comparison with the Census
+combi <- survey_counts[Variable == studyV & Value >= 6, sum(Count)]
+survey_counts <- rbind(survey_counts, list(studyV, 6000, combi, "6+", "Pilot Survey", NA_real_, NA_real_))
+
+# Comparison
+
+ext_source <- "2011 Census"
+resp_real <- c(6000,1:5)
+resp_vals <- c(-2, 1:5, 6000)
+resp_perc <- c(0, 29.75, 34.19, 15.57, 13.25, 4.83, 2.41)
+
+
+survey_counts <- fill.comparison.data()
+
+p.c1 <- plot.survey.data(onlyPercentOfAnswered = TRUE, compare = TRUE, label_angle = 0)
+p.c1 <- p.c1 + theme(legend.position = c(0.85, 0.85))
+#fig_caps(name = "p.c1", caption = "Household size")
+
+ggplot(data = survey_counts[Variable == studyV & Value %in% resp_real,], 
+       aes(x = Label, y = PercentOfAnswered, fill = Source)) + 
+  geom_bar(stat = "identity", position = position_dodge()) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme(text = element_text(size = font.size))
+
+
+#### C2 Age and gender - lots to do here but can focus in - STILL WORKING ON THIS ####
+
+## All household members 65+
+
+#survey_reordered[, All_65_plus := -2]
+#survey_reordered[C1 > 0 & C2_error == FALSE & C2_tot_65_plus == C1_new, All_65_plus := 1]
+#survey_reordered[C1 > 0 & C2_error == FALSE & C2_tot_65_plus < C1_new, All_65_plus := 0]
+
+tmp1 <-  survey_reordered[, .N, by = All_65_plus]
+
+tmp2 <- data.table(Variable = rep("All_65_plus", 3), Value = c(-2, 0, 1), 
+                   Count = c(tmp1[All_65_plus == -2, N], tmp1[All_65_plus == 0, N], 
+                             tmp1[All_65_plus == 1, N]), 
+                   Label = c("Unknown", "Not all 65+", "All 65+"), 
+                   Source = rep("Pilot Survey", 3))
+
+tmp2[, Percent := round(Count/nParticipants * 100, 2)]
+tmp2[Value >= 0 , PercentOfAnswered := round(Count / tmp2[Value >= 0, sum(Count)] * 100, 2)]
+
+survey_counts <- rbind(survey_counts, tmp2)
+
+#### C3 ####
+
+# No one working
+
+#survey_reordered[, None_working := -2]
+#survey_reordered[C3_error == FALSE & C301 <= 0 & C302 <= 0, None_working := 1]
+#survey_reordered[C3_error == FALSE & (C301 > 0 | C302 > 0), None_working := 0]
+
+tmp1 <- survey_reordered[, .N, by = None_working]
+
+tmp2 <- data.table(Variable = rep("None_working", 3), Value = c(-2, 0, 1), 
+                   Count = c(tmp1[None_working == -2, N], tmp1[None_working == 0, N], 
+                             tmp1[None_working == 1, N]), 
+                   Label = c("Unknown", "At least 1 in work", "No one in work"), 
+                   Source = rep("Pilot Survey", 3))
+
+tmp2[, Percent := round(Count/nParticipants * 100, 2)]
+tmp2[Value >= 0 , PercentOfAnswered := round(Count / tmp2[Value >= 0, sum(Count)] * 100, 2)]
+
+survey_counts <- rbind(survey_counts, tmp2)
+
+
+
+```
+
+```{r sectionDQuestions, include = FALSE}
+
+#### D4 How well are you managing financially? ####
+studyV <- "D4"
+
+# Combine no answer and prefer not to say for comparability reasons
+survey_counts <- rbind(survey_counts, list("D4", -5, survey_counts[Variable == studyV & Value <= -2, sum(Count)],
+                                         "No answer or prefer not to say", "Pilot Survey", NA_real_, NA_real_))
+
+ext_source <- "USoc Wave 9"
+resp_real <- c(-5, -1, 1,2,3,4,5)
+resp_vals <- c(-5,-3,-2,-1,1,2,3,4,5)
+resp_perc <- c(3.49, 0, 0, 0.19, 29.29, 39.13, 20.48, 5.48, 2.13)
+
+survey_counts <- fill.comparison.data()
+
+p.d4 <- plot.survey.data(onlyPercentOfAnswered = TRUE, compare = TRUE)
+p.d4 <- p.d4 + scale_y_continuous(limits = c(0,45)) + 
+  theme(legend.position = c(0.85, 0.85)) + 
+  scale_x_discrete(labels = c("No answer or\nprefer not to say", "Don't know", "Living\ncomfortably",
+                              "Doing alright", "Just about\ngetting by", "Finding it\nquite difficult",
+                              "Finding it\nvery difficult")) +
+  labs(y = "Percent")
+#fig_caps(name = "p.d4", caption = "How well would you say you yourself are managing financially?")
+
+
+
+
+```
+
+```{r RegionIMD, include = FALSE}
+# p.r <- ggplot(data = signupResponse[is.na(Treatment_type) & Split_by == "Region"], 
+#                aes(x = Category, y = Percent, fill = as.factor(Category))) +
+#     geom_bar(stat = "identity", position = position_dodge()) + 
+#     geom_text(aes(label = paste(Percent, "%", sep = "")), vjust = 1, size = geom.text.size) +
+#     theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+#     labs(x = "Region", y = "Response rate (%)", fill = "Region")  +
+#     scale_fill_brewer(palette = "RdYlBu") +
+#     theme(text = element_text(size = font.size))
+# 
+# #fig_caps(name = "p.r", caption = "Participant response rate by region.")
+# 
+# p.imd <- ggplot(data = signupResponse[is.na(Treatment_type) & Split_by == "IMD"], 
+#                aes(x = Category, y = Percent, fill = as.factor(Category))) +
+#     geom_bar(stat = "identity", position = position_dodge()) + 
+#     geom_text(aes(label = paste(Percent, "%", sep = "")), vjust = 1, size = geom.text.size) +
+#     labs(x = "IMD quintile (1 is greatest deprivation)", y = "Response rate (%)", fill = "IMD")  +
+#     scale_fill_brewer(palette = "RdYlBu") +
+#     theme(text = element_text(size = font.size), legend.position = c(0.1, 0.8))
+
+#     theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+
+#fig_caps(name = "p.imd", caption = "Participant response rate by Index of Multiple Deprivation (IMD) quintile")
+
+```
+
+```{r representativeBreakdown, include = FALSE}
+
+## Prep
+
+# survey_reordered[, Incentive := "None"]
+# survey_reordered[Cell %in% c(2, 5, 8, 11), Incentive := "Voucher"]
+# survey_reordered[Cell %in% c(3, 6, 9, 12), Incentive := "Thermometer"]
+# 
+# survey_reordered[, Postal := 1]
+# survey_reordered[Cell > 6, Postal := 2]
+# 
+# survey_reordered[, Consent_date := as.Date(substr(CONSENT_GIVEN, start = 1, stop = 10))]
+# 
+# survey_reordered[, Mailing := 2]
+# survey_reordered[Consent_date <= "2019-08-29", Mailing := 1]
+# survey_reordered[Consent_date > "2019-09-11" & Consent_date <= "2019-09-24", Mailing := 3]
+# survey_reordered[Consent_date > "2019-09-24", Mailing := 4]
+# 
+# survey_reordered[, MailingVersion := 1]
+# survey_reordered[Cell %in% c(4,5,6,10,11,12), MailingVersion := 2]
+# 
+# survey_reordered[, Collect_Meth_word := "Online"]
+# survey_reordered[Collection_method == 2, Collect_Meth_word := "Offline"]
+# 
+# ## Region 
+# 
+# p.i.r <- ggplot(data = signupResponse[Treatment_type == "Incentive" & Split_by == "Region"], 
+#                   aes(x = Category, y = Percent, group = reorder(Treatment, PlotOrder), 
+#                       fill = as.factor(reorder(Treatment, PlotOrder)))) +
+#     geom_bar(stat = "identity", position = position_dodge()) + 
+#     theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+#     labs(x = "Region", y = "Participation rate (%)", fill = "Incentive")  +
+#     scale_fill_brewer(palette = "RdYlBu") +
+#     theme(text = element_text(size = font.size)) +
+#     theme(legend.position = "top")
+# 
+# #fig_caps(name = "p.i.r", caption = "Participation rates by region and by incentive.")
+# 
+# p.c.r <- ggplot(data = signupResponse[Treatment_type == "Content" & Split_by == "Region"], 
+#                   aes(x = Category, y = Percent, group = reorder(Treatment, PlotOrder), 
+#                       fill = as.factor(reorder(Treatment, PlotOrder)))) +
+#     geom_bar(stat = "identity", position = position_dodge()) + 
+#     theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+#     labs(x = "Region", y = "Participation rate (%)", fill = "Mailing version")  +
+#     scale_fill_brewer(palette = "RdYlBu") +
+#     theme(text = element_text(size = font.size)) + 
+#   theme(legend.position = "top")
+# 
+# #fig_caps(name = "p.c.r", caption = "Participation rates by region and by mailing version.")
+# 
+# p.p2w.r <- ggplot(data = signupResponse[Treatment_type == "nPostal" & Split_by == "Region"], 
+#                   aes(x = Category, y = Percent, group = reorder(Treatment, PlotOrder), 
+#                       fill = as.factor(reorder(Treatment, PlotOrder)))) +
+#     geom_bar(stat = "identity", position = position_dodge()) + 
+#     theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+#     labs(x = "Region", y = "Participation rate (%)", fill = "Postal response options")  +
+#     scale_fill_brewer(palette = "RdYlBu") +
+#     theme(text = element_text(size = font.size)) + 
+#   theme(legend.position = "top")
+# 
+# #fig_caps(name = "p.p2w.r", caption = "Participation rates by region and by number of postal response options.")
+# 
+# ## IMD 
+# 
+# p.i.imd <- ggplot(data = signupResponse[Treatment_type == "Incentive" & Split_by == "IMD"], 
+#                   aes(x = Category, y = Percent, group = reorder(Treatment, PlotOrder), 
+#                       fill = as.factor(reorder(Treatment, PlotOrder)))) +
+#     geom_bar(stat = "identity", position = position_dodge()) + 
+#     theme(axis.text.x = element_text(angle = 0, hjust = 0.5)) +
+#     labs(x = "IMD Quintile", y = "Participation rate (%)", fill = "Incentive")  +
+#     scale_fill_brewer(palette = "RdYlBu") +
+#     theme(text = element_text(size = font.size))
+# 
+# p.i.imd <- p.i.imd + theme(legend.position = c(0.15, 0.8))
+# 
+# #fig_caps(name = "p.i.imd", caption = "Participation rates by IMD quintile and by incentive.")
+# 
+# p.c.imd <- ggplot(data = signupResponse[Treatment_type == "Content" & Split_by == "IMD"], 
+#                   aes(x = Category, y = Percent, group = reorder(Treatment, PlotOrder), 
+#                       fill = as.factor(reorder(Treatment, PlotOrder)))) +
+#     geom_bar(stat = "identity", position = position_dodge()) + 
+#     theme(axis.text.x = element_text(angle = 0, hjust = 0.5)) +
+#     labs(x = "IMD Quintile", y = "Participation rate (%)", fill = "Mailing version")  +
+#     scale_fill_brewer(palette = "RdYlBu") +
+#     theme(text = element_text(size = font.size)) + 
+#     theme(legend.position = c(0.15, 0.85))
+# 
+# #fig_caps(name = "p.c.imd", caption = "Participation rates by IMD quintile and by mailing version.")
+# 
+# 
+# p.p2w.imd <- ggplot(data = signupResponse[Treatment_type == "nPostal" & Split_by == "IMD"], 
+#                   aes(x = Category, y = Percent, group = reorder(Treatment, PlotOrder), 
+#                       fill = as.factor(reorder(Treatment, PlotOrder)))) +
+#     geom_bar(stat = "identity", position = position_dodge()) + 
+#     labs(x = "IMD Quintile", y = "Participation rate (%)", fill = "Postal response options")  +
+#     scale_fill_brewer(palette = "RdYlBu") +
+#     theme(text = element_text(size = font.size)) + 
+#     theme(legend.position = c(0.2, 0.85))
+# 
+# #fig_caps(name = "p.p2w.imd", caption = "Participation rates by IMD quintile and by number of postal response options.")
+# 
+# 
+# ### Mailing number
+# mailings <- signupResponse[Treatment_type == "MailingN" & !(is.na(Split_by)), ]
+# mailings[, PercentOfRecruited := sapply(1:nrow(mailings), function(x) {
+#   round(mailings[x, Participants] / signupResponse[is.na(Treatment_type) & Category == mailings[x, Category],
+#                                                    Participants]*100, 1)
+#     })
+#   ]
+# 
+# # p.M.imd2 <- ggplot(data = mailings[Split_by == "IMD"], 
+# #                   aes(x = Category, y = PercentOfRecruited, group = reorder(Treatment, PlotOrder), 
+# #                       fill = as.factor(reorder(Treatment, PlotOrder)))) +
+# #     geom_bar(stat = "identity", position = position_dodge()) + 
+# #     theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+# #     labs(x = "IMD Quintile", y = "% of IMD participants", fill = "Mailing number")  +
+# #     scale_fill_brewer(palette = "RdYlBu") +
+# #     theme(text = element_text(size = font.size))
+# 
+# p.M.imd2 <- ggplot(data = mailings[Split_by == "IMD"], 
+#                   aes(x = Category, y = PercentOfRecruited, group = reorder(Treatment, PlotOrder), 
+#                       fill = as.factor(reorder(Treatment, PlotOrder)))) +
+#     geom_bar(stat = "identity", position = position_dodge()) + 
+#     labs(x = "IMD Quintile", y = "% of IMD participants", fill = "Mailing number")  +
+#     scale_fill_brewer(palette = "RdYlBu") +
+#     theme(text = element_text(size = font.size)) + 
+#   theme(legend.position = "top")
+# 
+# 
+# #fig_caps(name = "p.M.imd2", caption = "Percentage from each mailing of each IMD quintile's participants.")
+# 
+# p.M.r2 <- ggplot(data = mailings[Split_by == "Region"], 
+#                   aes(x = Category, y = PercentOfRecruited, group = reorder(Treatment, PlotOrder), 
+#                       fill = as.factor(reorder(Treatment, PlotOrder)))) +
+#     geom_bar(stat = "identity", position = position_dodge()) + 
+#     theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+#     labs(x = "Region", y = "% of Region participants", fill = "Mailing number")  +
+#     scale_fill_brewer(palette = "RdYlBu") +
+#     theme(text = element_text(size = font.size)) +
+#     theme(legend.position = "top")
+# 
+# #fig_caps(name = "p.M.r2", caption = "Percentage from each mailing of each region's participants.")
+# 
+# ## Collection method plots
+# tot.online <- survey_reordered[Collect_Meth_word == "Online", .N]
+# tot.offline <- survey_reordered[Collect_Meth_word == "Offline", .N]
+# 
+# #### IMD
+# coll.imd <- survey_reordered[, .N, keyby = .(IMD_quintile, Collect_Meth_word)]
+# coll.imd[Collect_Meth_word == "Online", Percent := round(N/tot.online * 100, 1)]
+# coll.imd[Collect_Meth_word == "Offline", Percent := round(N/tot.offline * 100, 1)]
+# # 
+# # p.coll.imd <- ggplot(data = coll.imd, 
+# #                   aes(x = IMD_quintile, y = Percent, group = Collect_Meth_word, 
+# #                       fill = as.factor(Collect_Meth_word))) +
+# #     geom_bar(stat = "identity", position = position_dodge()) + 
+# #     theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+# #     labs(x = "IMD Quintile", y = "% of online or offline participants", fill = "Collection method")  +
+# #     scale_fill_brewer(palette = "RdYlBu") +
+# #     theme(text = element_text(size = font.size))
+# 
+# p.coll.imd <- ggplot(data = coll.imd, 
+#                   aes(x = IMD_quintile, y = Percent, group = Collect_Meth_word, 
+#                       fill = as.factor(Collect_Meth_word))) +
+#     geom_bar(stat = "identity", position = position_dodge()) + 
+#     labs(x = "IMD Quintile", y = "% of online or offline participants", fill = "Collection method")  +
+#     scale_fill_brewer(palette = "RdYlBu") +
+#     theme(text = element_text(size = font.size)) + 
+#   theme(legend.position = c(0.15, 0.85))
+# 
+# #fig_caps(name = "p.coll.imd", caption = "Survey collection method split by IMD quintile.")
+# 
+# #### Region
+# coll.r <- survey_reordered[, .N, keyby = .(Region, Collect_Meth_word)]
+# coll.r[Collect_Meth_word == "Online", Percent := round(N/tot.online * 100, 1)]
+# coll.r[Collect_Meth_word == "Offline", Percent := round(N/tot.offline * 100, 1)]
+# 
+# p.coll.r <- ggplot(data = coll.r, 
+#                   aes(x = Region, y = Percent, group = Collect_Meth_word, 
+#                       fill = as.factor(Collect_Meth_word))) +
+#     geom_bar(stat = "identity", position = position_dodge()) + 
+#     theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+#     labs(x = "Region", y = "% of online or offline participants", fill = "Collection method")  +
+#     scale_fill_brewer(palette = "RdYlBu") +
+#     theme(text = element_text(size = font.size)) + 
+#   theme(legend.position = c(0.15, 0.85))
+
+#fig_caps(name = "p.coll.r", caption = "Survey collection method split by region.")
+
+#### B1_agg type of accomm
+# survey_reordered[, B1_agg := NA_character_]
+# survey_reordered[B1 == 1, B1_agg := "Detached"]
+# survey_reordered[B1 == 2, B1_agg := "Semi-detached"]
+# survey_reordered[B1 == 3, B1_agg := "Terraced"]
+# survey_reordered[B1 > 3, B1_agg := "Flat, maisonette or apartment"]
+# 
+# coll.B1_agg <- survey_reordered[, .N, keyby = .(B1_agg, Collect_Meth_word)]
+# coll.B1_agg[Collect_Meth_word == "Online", Percent := round(N/tot.online * 100, 1)]
+# coll.B1_agg[Collect_Meth_word == "Offline", Percent := round(N/tot.offline * 100, 1)]
+# 
+# p.coll.B1 <- ggplot(data = coll.B1_agg[!is.na(B1_agg)], 
+#                   aes(x = B1_agg, y = Percent, group = Collect_Meth_word, 
+#                       fill = as.factor(Collect_Meth_word))) +
+#     geom_bar(stat = "identity", position = position_dodge()) + 
+#     theme(axis.text.x = element_text(angle = 0, hjust = 0.5)) +
+#     labs(x = "Accommodation type", y = "% of online or offline participants", fill = "Collection method")  +
+#     scale_fill_brewer(palette = "RdYlBu") +
+#     theme(text = element_text(size = font.size)) + 
+#   theme(legend.position = "top") + 
+#   scale_x_discrete(labels = c("Detached", "Flat, maisonette\nor apartment", "Semi-\ndetached", "Terraced"))
+# 
+# #fig_caps(name = "p.coll.B1", caption = "Survey collection method split by accommodation type.")
+# 
+# 
+# #### B4_agg type of accomm
+# survey_reordered[, B4_agg := NA_character_]
+# survey_reordered[B4 %in% c(1,2), B4_agg := "Own"]
+# survey_reordered[B4 %in% c(3,4,5), B4_agg := "Rent"]
+# 
+# coll.B4_agg <- survey_reordered[, .N, keyby = .(B4_agg, Collect_Meth_word)]
+# coll.B4_agg[Collect_Meth_word == "Online", Percent := round(N/tot.online * 100, 1)]
+# coll.B4_agg[Collect_Meth_word == "Offline", Percent := round(N/tot.offline * 100, 1)]
+# 
+# p.coll.B4 <- ggplot(data = coll.B4_agg[!is.na(B4_agg)], 
+#                   aes(x = B4_agg, y = Percent, group = Collect_Meth_word, 
+#                       fill = as.factor(Collect_Meth_word))) +
+#     geom_bar(stat = "identity", position = position_dodge()) + 
+#     theme(axis.text.x = element_text(angle = 0, hjust = 0.5)) +
+#     labs(x = "Tenancy type", y = "% of online or offline participants", fill = "Collection method")  +
+#     scale_fill_brewer(palette = "RdYlBu") +
+#     theme(text = element_text(size = font.size))
+# 
+# #fig_caps(name = "p.coll.B4", caption = "Survey collection method split by tenancy type.")
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# ## A13_01
+# 
+# A1301.vals <- list(c(4,5), 3, c(1,2))
+# survey_reordered[, A13_01_agg := NA_character_]
+# survey_reordered[A13_01 %in% c(1,2), A13_01_agg := "Very often or always"]
+# survey_reordered[A13_01 == 3, A13_01_agg := "Quite often"]
+# survey_reordered[A13_01 %in% c(4,5), A13_01_agg := "Not very often or never"]
+# 
+# p.q.a1301 <- plot.by.quintile(q = "A13_01", s = "USoc Wave 4", vals = A1301.vals,
+#                               x.axis.label = "Switch off lights in unused rooms")
+# 
+# p.i.a1301 <- plot.by.incentive(q = "A13_01", s = "USoc Wave 4", vals = A1301.vals,
+#                               x.axis.label = "Switch off lights in unused rooms")
+# 
+# p.p.a1301 <- plot.by.postal(q = "A13_01", s = "USoc Wave 4", vals = A1301.vals,
+#                               x.axis.label = "Switch off lights in unused rooms")
+# 
+# p.m.a1301 <- plot.by.mailing(q = "A13_01", s = "USoc Wave 4", vals = A1301.vals,
+#                               x.axis.label = "Switch off lights in unused rooms")
+# 
+# ## A13_02
+# 
+# A1302.vals <- list(c(4,5), 3, c(1,2))
+# survey_reordered[, A13_02_agg := NA_character_]
+# survey_reordered[A13_02 %in% c(1,2), A13_02_agg := "Very often or always"]
+# survey_reordered[A13_02 == 3, A13_02_agg := "Quite often"]
+# survey_reordered[A13_02 %in% c(4,5), A13_02_agg := "Not very often or never"]
+# 
+# p.q.a1302 <- plot.by.quintile(q = "A13_02", s = "USoc Wave 4", vals = A1301.vals,
+#                               x.axis.label = "Switch off lights in unused rooms")
+# 
+# p.i.a1302 <- plot.by.incentive(q = "A13_02", s = "USoc Wave 4", vals = A1301.vals,
+#                               x.axis.label = "Switch off lights in unused rooms")
+# 
+# p.p.a1302 <- plot.by.postal(q = "A13_02", s = "USoc Wave 4", vals = A1301.vals,
+#                               x.axis.label = "Switch off lights in unused rooms")
+# 
+# p.m.a1302 <- plot.by.mailing(q = "A13_02", s = "USoc Wave 4", vals = A1301.vals,
+#                               x.axis.label = "Switch off lights in unused rooms")
+# 
+# ## B1
+# B1.vals <- list(1, c(4,5,6), 2, 3)
+# 
+# survey_reordered[, B1_agg := NA_character_]
+# survey_reordered[B1 == 1, B1_agg := "Detached"]
+# survey_reordered[B1 == 2, B1_agg := "Semi-detached"]
+# survey_reordered[B1 == 3, B1_agg := "Terraced"]
+# survey_reordered[B1 > 3, B1_agg := "Flat, maisonette or apartment"]
+# 
+# p.q.b1 <- plot.by.quintile(q = "B1", s = "2011 Census", vals = B1.vals, 
+#                              x.axis.label = "", s.supplied = 0, p.supplied = 0,
+#                            label_angle = 0)
+# p.q.b1 <- p.q.b1 + theme(legend.position = "top") + 
+#   scale_x_discrete(labels = c("Detached", "Flat, maisonette\nor apartment", "Semi-\ndetached", "Terraced"))
+# #fig_caps(name = "p.q.b1", caption = "Accommodation type by IMD quintile. Blue dashed line shows the sample mean. Solid black line shows the 2011 Census mean.")
+# 
+# p.i.b1 <- plot.by.incentive(q = "B1", s = "2011 Census", vals = B1.vals, 
+#                              x.axis.label = "", s.supplied = 0, p.supplied = 0,
+#                             label_angle = 0)
+# p.i.b1 <- p.i.b1 + theme(legend.position = "top") + 
+#   scale_x_discrete(labels = c("Detached", "Flat, maisonette\nor apartment", "Semi-\ndetached", "Terraced"))
+# #fig_caps(name = "p.i.b1", caption = "Accommodation type by incentive")
+# 
+# p.p.b1 <- plot.by.postal(q = "B1", s = "2011 Census", vals = B1.vals, 
+#                              x.axis.label = "Type of Accommodation", s.supplied = 0, p.supplied = 0)
+# 
+# p.m.b1 <- plot.by.mailing(q = "B1", s = "2011 Census", vals = B1.vals, 
+#                              x.axis.label = "Type of Accommodation", s.supplied = 0, p.supplied = 0)
+# 
+# 
+# ## B4
+# B4.vals <- list(c(1,2), c(3,4,5))
+# survey_reordered[, B4_agg := NA_character_]
+# survey_reordered[B4 %in% c(1,2), B4_agg := "Own"]
+# survey_reordered[B4 %in% c(3,4,5), B4_agg := "Rent"]
+# 
+# source.data <- c(survey_counts[Variable == "B4" & Source == "USoc Wave 9" & Value == -5, PercentOfAnswered],
+#                  survey_counts[Variable == "B4" & Source == "USoc Wave 9" & Value == -6, PercentOfAnswered])
+# 
+# pilot.data <- c(survey_counts[Variable == "B4" & Source == "Pilot Survey" & Value == -5, PercentOfAnswered],
+#                  survey_counts[Variable == "B4" & Source == "Pilot Survey" & Value == -6, PercentOfAnswered])
+# 
+# p.q.b4 <- plot.by.quintile(q = "B4", s = "USoc Wave 9", vals = B4.vals,
+#                            x.axis.label = "Owning versus Renting", 
+#                            s.supplied = source.data, p.supplied = pilot.data,
+#                            label_angle = 0)
+# p.q.b4 <- p.q.b4 + theme(legend.position = c(0.85, 0.8))
+# #fig_caps(name = "p.q.b4", caption = "Tenancy type by IMD quintile. Blue dashed line shows the sample mean. Solid black line shows the Understanding Society Wave 9 mean.")
+# 
+# p.i.b4 <- plot.by.incentive(q = "B4", s = "USoc Wave 9", vals = B4.vals,
+#                            x.axis.label = "Owning versus Renting", 
+#                            s.supplied = source.data, p.supplied = pilot.data)
+# 
+# p.p.b4 <- plot.by.postal(q = "B4", s = "USoc Wave 9", vals = B4.vals,
+#                            x.axis.label = "Owning versus Renting", 
+#                            s.supplied = source.data, p.supplied = pilot.data)
+# 
+# p.m.b4 <- plot.by.mailing(q = "B4", s = "USoc Wave 9", vals = B4.vals,
+#                            x.axis.label = "", 
+#                            s.supplied = source.data, p.supplied = pilot.data,
+#                           label_angle = 0)
+# p.m.b4 <- p.m.b4 + theme(legend.position = c(0.85, 0.75))
+# #fig_caps(name = "p.m.b4", caption = "Home-owners versus renters across the 4 mailings. Dashed blue line indicates sample mean, solid black line shows the Understanding Society Wave 9 mean.")
+# 
+# 
+# ## B6
+# B6.vals <- list(c(1,2), 3, c(4, 5000))
+# survey_reordered[, B6_agg := NA_character_]
+# survey_reordered[B6 %in% c(1,2), B6_agg := "1 or 2"]
+# survey_reordered[B6 == 3, B6_agg := "3"]
+# #survey_reordered[B6 %in% c(4, 5000), B6_agg := "4 or more"]
+# survey_reordered[B6 >= 4, B6_agg := "4 or more"]
+# 
+# p.q.b6 <- plot.by.quintile(q = "B6", s = "2011 Census", 
+#                            vals = B6.vals, x.axis.label = "Number of Bedrooms",
+#                            label_angle = 0)
+# p.q.b6 <- p.q.b6 + theme(legend.position = "top")
+# #fig_caps(name = "p.q.b6", caption = "Number of bedrooms by IMD quintile. Blue dashed line shows the sample mean. Solid black line shows the 2011 Census mean.")
+# 
+# p.i.b6 <- plot.by.incentive(q = "B6", s = "2011 Census", 
+#                            vals = B6.vals, x.axis.label = "Number of Bedrooms",
+#                            label_angle = 0)
+# p.i.b6 <- p.i.b6 + theme(legend.position = "top")
+# #fig_caps(name = "p.i.b6", caption = "Number of bedrooms by incentive")
+# 
+# p.p.b6 <- plot.by.postal(q = "B6", s = "2011 Census", 
+#                            vals = B6.vals, x.axis.label = "Number of Bedrooms")
+# 
+# p.m.b6 <- plot.by.mailing(q = "B6", s = "2011 Census", 
+#                            vals = B6.vals, x.axis.label = "Number of Bedrooms")
+# 
+# ## C1
+# 
+# C1.vals <- list(2, c(1, 3:5, 6000))
+# survey_reordered[, C1_agg := "other"]
+# survey_reordered[C1 == 2, C1_agg := "2 people"]
+# survey_reordered[C1 == -2, C1_agg := NA]
+# 
+# p.q.c1 <- plot.by.quintile(q = "C1", s = "2011 Census", 
+#                            vals = C1.vals, x.axis.label = "Number of Occupants")
+# 
+# p.i.c1 <- plot.by.incentive(q = "C1", s = "2011 Census", 
+#                            vals = C1.vals, x.axis.label = "Number of Occupants")
+# 
+# p.p.c1 <- plot.by.postal(q = "C1", s = "2011 Census", 
+#                            vals = C1.vals, x.axis.label = "Number of Occupants")
+# 
+# p.m.c1 <- plot.by.mailing(q = "C1", s = "2011 Census", 
+#                            vals = C1.vals, x.axis.label = "Number of Occupants")
+# 
+# 
+# 
+# 
+# 
+# ## D4
+# D4.vals <- list(c(1,2), c(3,4,5), -5)
+# 
+# survey_reordered[, D4_agg := NA_character_]
+# survey_reordered[D4 %in% c(1,2), D4_agg := "Managing Best"] # managing best (top 2)
+# survey_reordered[D4 %in% c(3,4,5), D4_agg := "Managing worst"] # managing worst (bottom 3)
+# survey_reordered[D4 %in% c(-3, -2), D4_agg := "No answer/prefer not to say"] # no answer or prefer not to say
+# 
+# p.q.d4 <- plot.by.quintile(q = "D4", s = "USoc Wave 9", vals = D4.vals,
+#                            x.axis.label = "", label_angle = 0)
+# p.q.d4 <- p.q.d4 + theme(legend.position = c(0.85, 0.75)) + 
+#   scale_x_discrete(labels = c("Managing best", "Managing worst", "No answer/\nprefer not to say"))
+# #fig_caps(name = "p.q.d4", caption = "'Managing financially' by IMD quintile. Blue dashed line shows the sample mean. Solid black line shows the Understanding Society Wave 9 mean.")
+# 
+# p.i.d4 <- plot.by.incentive(q = "D4", s = "USoc Wave 9", vals = D4.vals,
+#                            x.axis.label = "Managing Financially")
+# 
+# p.p.d4 <- plot.by.postal(q = "D4", s = "USoc Wave 9", vals = D4.vals,
+#                            x.axis.label = "Managing Financially")
+# 
+# p.m.d4 <- plot.by.mailing(q = "D4", s = "USoc Wave 9", vals = D4.vals,
+#                            x.axis.label = "Managing Financially")
+# 
+# ## all 65 plus
+# tmp <- data.table(Variable = rep("All_65_plus",2),
+#                   Value = c(0,1),
+#                   Count = rep(NA,2),
+#                   Label = c("Not all 65+","All 65+"),
+#                   Source = rep("2011 Census", 2),
+#                   Percent = rep(NA,2),
+#                   PercentOfAnswered = c(79.3, 20.7)
+# )
+# survey_counts <- rbind(survey_counts, tmp)
+# 
+# All_65_plus_vals <- c(1, 0)
+# survey_reordered[, All_65_plus_agg := "all aged 65+"]
+# survey_reordered[All_65_plus == 0, All_65_plus_agg := "Not all aged 65+"]
+# survey_reordered[All_65_plus == -2, All_65_plus_agg := NA]
+# 
+# p.q.All_65_plus <- plot.by.quintile(q = "All_65_plus", s = "2011 Census", vals = All_65_plus_vals,
+#                            x.axis.label = "")
+
+
+```
+
+```{r testingSignificance, include = FALSE}
+# 
+# # Incentives
+# treat <- "Incentive"
+# treat.options <- c("None", "Voucher", "Thermometer")
+# 
+# v <- "B1_agg"
+# categories  <- c("Detached", "Flat, maisonette or apartment", "Semi-detached", "Terraced")
+# i.b1.tab <- setup.sig.test(treatment_type = treat, treatment = treat.options, bars <- categories, variable = v)
+# i.b1.s  <- chisq.test(i.b1.tab[1:2, 1:2], correct = FALSE)
+# 
+# v <- "B6_agg"
+# categories <- sort(unique(survey_reordered$B6_agg))
+# i.b6.tab <- setup.sig.test(treatment_type = treat, treatment = treat.options, bars <- categories, variable = v)
+# i.b6.s  <- chisq.test(i.b6.tab[1:2, c(1,2)], correct = FALSE)
+# 
+# v <- "C1_agg"
+# survey_reordered[, C1_agg := "other"]
+# survey_reordered[C1 == 2, C1_agg := "2 people"]
+# survey_reordered[C1 == -2, C1_agg := NA]
+# categories <- sort(unique(survey_reordered$C1_agg))
+# i.c1.tab <- setup.sig.test(treatment_type = treat, treatment = treat.options, bars <- categories, variable = v)
+# i.c1.s  <- chisq.test(i.c1.tab[1:2, c(1,2)], correct = FALSE)
+# 
+# v <- "All_65_plus_agg"
+# survey_reordered[, All_65_plus_agg := "all aged 65+"]
+# survey_reordered[All_65_plus == 0, All_65_plus_agg := "Not all aged 65+"]
+# survey_reordered[All_65_plus == -2, All_65_plus_agg := NA]
+# categories <- sort(unique(survey_reordered$All_65_plus_agg))
+# i.all_65.tab <- setup.sig.test(treatment_type = treat, treatment = treat.options, bars <- categories, variable = v)
+# i.all_65.s  <- chisq.test(i.c1.tab[1:2, ], correct = FALSE)
+# 
+# # Mailing content
+# treat <- "MailingVersion"
+# treat.options <- c("1", "2")
+# 
+# v <- "B6_agg"
+# categories <- sort(unique(survey_reordered$B6_agg))
+# m.b6.tab <- setup.sig.test(treatment_type = treat, treatment = treat.options, bars <- categories, variable = v)
+# m.b6.s  <- chisq.test(i.b6.tab[1:2, c(1,3)], correct = FALSE)
+# 
+# # Postal vs push to web
+# treat <- "Postal"
+# treat.options <- c("1", "2")
+# 
+# v <- "B6_agg"
+# categories <- sort(unique(survey_reordered$B6_agg))
+# p.b6.tab <- setup.sig.test(treatment_type = treat, treatment = treat.options, bars <- categories, variable = v)
+# p.b6.s  <- chisq.test(p.b6.tab[1:2, c(1,3)], correct = FALSE)
+# 
+# 
+# # Mailing number
+# survey_reordered[, Mailing_agg := "1 to 3"]
+# survey_reordered[Mailing == 4, Mailing_agg := "4"]
+# 
+# treat <- "Mailing_agg"
+# treat.options <- c("1 to 3", "4")
+# 
+# v <- "B4_agg"
+# categories <- sort(unique(survey_reordered$B4_agg))
+# M.b4.tab <- setup.sig.test(treatment_type = treat, treatment = treat.options, bars <- categories, variable = v)
+# M.b4.s  <- chisq.test(M.b4.tab, correct = FALSE)
+# 
+# v <- "C1_agg"
+# categories <- sort(unique(survey_reordered$C1_agg))
+# M.c1.tab <- setup.sig.test(treatment_type = treat, treatment = treat.options, bars <- categories, variable = v)
+# M.c1.s  <- chisq.test(M.c1.tab[1:2, c(1,2)], correct = FALSE)
+
+```
+
+
+```{r recruitmentStats, include = FALSE}
+nTot <- allSignups[`TOP-LEVEL CATEGORY` %in% c("Active Consenter", "Active Consenter now withdrawn (COT)",
+                                               "Active Consenter now withdrawn (MultiMeter)") &
+                     PARTICIPANT_TYPE == "Real", .N]
+nMulti <- allSignups[`TOP-LEVEL CATEGORY` %in% c("Active Consenter now withdrawn (MultiMeter)") &
+                       PARTICIPANT_TYPE == "Real", .N]
+nCOT <- allSignups[`TOP-LEVEL CATEGORY` %in% c("Active Consenter now withdrawn (COT)") &
+                     PARTICIPANT_TYPE == "Real", .N]
+nExplicWithdrawn <- allSignups[`TOP-LEVEL CATEGORY` %in% c("Active Consenter now withdrawn (Explicit)") &
+                     PARTICIPANT_TYPE == "Real", .N]
+nFullComplete <- realConsenters[`SURVEY_COMLPLETION_STATUS(v15)` == "Completed", .N]
+nPartialComplete <- realConsenters[`SURVEY_COMLPLETION_STATUS(v15)` == "Partially completed", .N]
+nNoSurvey <- realConsenters[!(`SURVEY_COMLPLETION_STATUS(v15)` %in% c("Completed", "Partially completed")), .N]
+
+
+survey_reordered[A1 == -2 & A2 == -2 & A301 == 0 & A302 == 0 & A303 == 0 & A304 == 0 & A305 == 0 & A306 == 0 & A307 ==0
+             & A308 == 0 & A309 == 0 & A310 ==0 , .N]
+
+survey_reordered[A1 == -2 & A2 == -2 & A14 == -2 , .N]
+
+allSignups[`TOP-LEVEL CATEGORY` %in% c("Active Consenter") &
+                     PARTICIPANT_TYPE == "Real", .N, by = `SURVEY_COMLPLETION_STATUS(v15)`]
+
+```
+
+```{r representativeIMDs, include = FALSE}
+# t.b1_agg <- survey_reordered[, .N, keyby = .(IMD_quintile, B1_agg)]
+# t.b1_agg[, `:=` (tot = 186, rep = 0.165)]
+# t.b1_agg[IMD_quintile == 2, `:=` (tot = 279, rep = 0.213)]
+# t.b1_agg[IMD_quintile == 3, `:=` (tot = 341, rep = 0.217)]
+# t.b1_agg[IMD_quintile == 4, `:=` (tot = 424, rep = 0.207)]
+# t.b1_agg[IMD_quintile == 5, `:=` (tot = 443, rep = 0.196)]
+# t.b1_agg[, P := N/tot]
+# t.b1_agg[, repP := P * rep]
+
+
+```
+
+```{r figCaptions, include = FALSE}
+
+# fig_caps(name = "p.r", caption = "Participant response rate by region.")
+# 
+# fig_caps(name = "p.imd", caption = "Participant response rate by Index of Multiple Deprivation (IMD) quintile")
+# 
+# fig_caps(name = "p.b1", caption = "Type of accommodation. The numbers above each bar gives the number of participants in our survey who selected the option.")
+# 
+# fig_caps(name = "p.b6", caption = "Number of bedrooms")
+# 
+# fig_caps(name = "p.b4", caption = "Owning versus Renting")
+# 
+# fig_caps(name = "p.c1", caption = "Household size")
+# 
+# fig_caps(name = "p.d4", caption = "How well would you say you yourself are managing financially?")
+# 
+# fig_caps(name = "p.a13_01", caption = "How often do you personally switch off lights in rooms that aren't being used?")
+# 
+# fig_caps(name = "p.a13_02", caption = "How often do you personally put more clothes on when feeling cold rather than putting the heating on or turning it up?")
+# 
+# fig_caps(name = "p.i.imd", caption = "Participation rates by IMD quintile and by incentive.")
+# 
+# fig_caps(name = "p.i.r", caption = "Participation rates by region and by incentive.")
+# 
+# fig_caps(name = "p.i.b1", caption = "Accommodation type by incentive")
+# 
+# fig_caps(name = "p.i.b6", caption = "Number of bedrooms by incentive")
+# 
+# fig_caps(name = "p.c.imd", caption = "Participation rates by IMD quintile and by mailing version.")
+# 
+# fig_caps(name = "p.c.r", caption = "Participation rates by region and by mailing version.")
+# 
+# fig_caps(name = "p.p2w.imd", caption = "Participation rates by IMD quintile and by number of postal response options.")
+# 
+# fig_caps(name = "p.p2w.r", caption = "Participation rates by region and by number of postal response options.")
+# 
+# fig_caps(name = "p.coll.imd", caption = "Survey collection method split by IMD quintile.")
+# 
+# fig_caps(name = "p.coll.r", caption = "Survey collection method split by region.")
+# 
+# fig_caps(name = "p.coll.B1", caption = "Survey collection method split by accommodation type.")
+# 
+# fig_caps(name = "p.M.imd2", caption = "Percentage from each mailing of each IMD quintile's participants.")
+# 
+# fig_caps(name = "p.M.r2", caption = "Percentage from each mailing of each region's participants.")
+# 
+# fig_caps(name = "p.m.b4", caption = "Home-owners versus renters across the 4 mailings. Dashed blue line indicates sample mean, solid black line shows the Understanding Society Wave 9 mean.")
+# 
+# fig_caps(name = "p.q.b1", caption = "Accommodation type by IMD quintile. Blue dashed line shows the sample mean. Solid black line shows the 2011 Census mean.")
+# 
+# fig_caps(name = "p.q.b4", caption = "Tenancy type by IMD quintile. Blue dashed line shows the sample mean. Solid black line shows the Understanding Society Wave 9 mean.")
+# 
+# fig_caps(name = "p.q.b6", caption = "Number of bedrooms by IMD quintile. Blue dashed line shows the sample mean. Solid black line shows the 2011 Census mean.")
+# 
+# fig_caps(name = "p.q.d4", caption = "'Managing financially' by IMD quintile. Blue dashed line shows the sample mean. Solid black line shows the Understanding Society Wave 9 mean.")
+
+
+```
+
+## Introduction 
+
+This document reports on the responses to SERL pilot study survey. The pilot study recruited `r nTot` participants (`r rd(nTot/18000*100)`% overall response rate), of which `r nFullComplete` completed all survey questions (`r rd(nFullComplete/nTot*100)`%), and only 38 did not answer any survey questions (`r rd(38/nTot*100)`%). The questions are presented in the order in which they appear in the survey. One online survey automatically skips questions that are not applicable due to previous answers; the postal survey relies on respondents to follow the instructions to skip where necessary. The data has been cleaned to remove (or replace where obvious) clearly erroneous responses and to make the postal and online survey data as consistent with one another as possible. 
+
+
+## Section A Questions: "About your energy use and heating"
+
+### A1: Before we contacted you about this study, did you know you had a smart meter?
+*Tick one answer only.* 
+
+```{r A1, include = FALSE}
+t.a1 <- survey_counts[Variable == "A1", c("Label", "Count", "Percent")]
+t.a1 <- t.a1[c(2,3,1),]
+colnames(t.a1) <- c("Response", "Number", "Percent")
+tab_caps("t.a1", caption = "Awareness of their smart meter. Almost all answered and almost all knew they had a smart meter.")
+
+ft.a1 <- my.flex(t.a1)
+```
+
+`r tab_caps("t.a1")`
+```{r}
+#kable(t.a1)
+ft.a1
+```
+
+### A2: To what extent, if at all, would you say that having a smart meter has affected the way you use gas or electricity in your accommodation? 
+*Tick one answer only, not applicable if answered 'no' to A1.*
+```{r A2, include = FALSE}
+fig_caps("p.a2", caption = "Impact of smart meter on energy consumption. Most people were only affected a little or not at all by having a smart meter. Almost 8% were affected 'a lot' and 17% were affected 'some'.")
+```
+
+`r fig_caps("p.a2")`
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+p.a2
+```
+
+### A3: What type of central heating does your accommodation have? 
+*By central heating we mean a central system that generates heat for multiple rooms. Tick all that apply whether or not you use it.* 
+
+```{r p.a3, include=FALSE}
+fig_caps("p.a3", caption = "Types of central heating")
+```
+
+`r fig_caps("p.a3")`
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+p.a3
+```
+
+### A4: Which, if any, of the following controls does your central heating system have? 
+*Please include all controls, even if you don't use them to control the central heating. Tick all that apply whether or not you use it. Not applicable if 'no central heating' was ticked in A3.*
+```{r A4, include = FALSE}
+fig_caps("p.a4", caption = "Types of central heating controllers. Timers and temperature settings were very common (81.4% and 78.0% respectively). 15.5% had a smart device.")
+```
+
+`r fig_caps("p.a4")`
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+p.a4
+```
+
+### A5: What temperature do you set your controller to in the winter months for the late afternoons or evenings? 
+*If you have more than one controller, choose what you would consider the main one. Write in number below.*
+
+```{r A5, include = FALSE}
+p.a5 <- ggplot(survey_reordered[!(A5 %in% c(-9, -2, -1)),], aes(x = A5)) + 
+  geom_histogram(binwidth = 1, color = "darkblue", fill = "steelblue") + 
+  theme(text = element_text(size = font.size)) +
+  labs(x = "thermostat temperature in degrees Celsius")
+fig_caps("p.a5", caption = "Responses to question A5 excluding not applicable, non-response and 'don't know'. Some responses have been converted from apparent Fahrenheit to Celsius.")
+```
+Despite the degrees C symbol next to the box, looking at the data showed that it was highly likely that some participants chose to respond in degrees Fahrenheit. Therefore all responses strictly greater than 35 were treated as temperatures in Fahrenheit and converted into Celsius (`r survey_reordered[A5_edit == TRUE, .N]` responses converted). The question was not applicable to `r survey_reordered[A5 == -9, .N]` participants, a further `r survey_reordered[A5 == -2, .N]` did not provide an answer, and a further `r survey_reordered[A5 == -1, .N]` selected the "Don't know/doesn't apply" box. `r fig_caps("p.a5", display = "cite")` shows the temperatures provided for the remaining participants. There are still some anomalies but the majority of the data is clustered around 20 degrees C which is as expected. 
+
+`r fig_caps("p.a5")`
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+p.a5
+```
+
+### A6: Other than central heating, does your household use any standalone heaters in your accommodation? 
+*This could be an electric heater, fireplace and so on. Tick one answer only.*
+
+```{r A6, include = FALSE}
+t.a6 <- survey_counts[Variable == "A6", c("Label", "Count", "Percent")]
+t.a6 <- t.a6[c(3,2,1),]
+t.a6[, Percent := rd(Count/nParticipants * 100, 2)]
+colnames(t.a6) <- c("Response", "Number", "Percent")
+tab_caps("t.a6", caption = "Responses to question A6.")
+
+ft.a6 <- my.flex(t.a6)
+```
+
+`r tab_caps("t.a6")`
+```{r}
+#kable(t.a6)
+ft.a6
+```
+
+### A7: Do any of your standalone heaters have their own source of fuel?
+*(E.g. from logs, coal or bottled gas). Tick one answer only. Not applicable if answered 'no' to A6*. 
+
+This data was cleaned so that anyone selecting no standalone heaters in question A6 automatically had their answer recorded as not applicable to question A7 (which always occurred in the online survey but not always on paper). Since the paper survey couldn't provide automatic quetion skipping, this led to 3 apparently non-existent heaters having their own source of fuel, and 38 non-existent heaters not having their own source of fuel. In both cases these were removed in cleaning to align with the online survey responses. 
+
+```{r A7, include = FALSE}
+t.a7 <- survey_counts[Variable == "A7", c("Label", "Count", "Percent")]
+t.a7 <- t.a7[c(3,4,2,1),]
+t.a7[Count == 247, Label := "Yes"]
+t.a7[Count == 600, Label := "No"]
+t.a7[, Percent := rd(Count/nParticipants * 100, 2)]
+colnames(t.a7) <- c("Response", "Number", "Percent")
+tab_caps("t.a7", caption = "Responses to question A7. Note that the full 'yes' and 'no' options were 'Yes, some or all have their own source of fuel (e.g. logs, coal, bottled gas, etc.)' and 'No, all are powered by mains gas or electric'.")
+ft.a7 <- my.flex(t.a7)
+```
+
+`r tab_caps("t.a7")`
+```{r}
+#kable(t.a7)
+ft.a7
+```
+
+### A8: In your opinion, during very cold winter weather, how often are these standalone heaters typically used in your household? 
+*Tick one answer only. Not applicable if answered 'no' to A6 or to A7.*
+
+This question was not applicable to most of the respondents (`r survey_counts[Variable == "A8" & Value == -9, Count]` out of `r nParticipants`) and a further `r survey_counts[Variable == "A8" & Value == -2, Count]` chose not to respond.
+
+```{r A8, include = FALSE}
+fig_caps("p.a8", caption = "Responses to question A8 (percentages do not include those who didn't respond or for whom the question was not applicable.")
+```
+
+`r fig_caps("p.a8")`
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+p.a8
+```
+
+### A9: Does your household adjust your heating for any of the following reasons?
+*Tick all that apply.*
+
+```{r A9, include = FALSE}
+fig_caps("p.a9", caption = "Responses to question A9 (applicable to all participants).")
+```
+
+`r fig_caps("p.a9")`
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+p.a9
+```
+
+### A10: When your accommodation is unoccupied for more than a day or so, how often will your household adjust the heating controls to ensure the heating either won't, or is much less likely to come on?
+*Tick one answer only.*
+
+In addition to the responses shown in the plot below, `r survey_counts[Variable == "A10" & Value == 6, Count]` participants (approximately 6%) responded "Not applicable, cannot do this". `r survey_counts[Variable == "A10" & Value == -2, Count]` did not answer.
+
+```{r A10, include = FALSE}
+fig_caps("p.a10", caption = "Adjusting heating for absence (excluding no answer and 'not applicable/cannot do this').")
+```
+
+`r fig_caps("p.a10")`
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+p.a10
+```
+
+### A11: During the winter months, are there any living spaces (e.g. bedrooms, living/dining rooms, kitchens) in your accommodation that your household does not normally heat?
+*Tick one answer only.*
+
+```{r A11, include = FALSE}
+t.a11 <- survey_counts[Variable == "A11", c("Label", "Count", "Percent")]
+t.a11 <- t.a11[c(2,3,1),]
+t.a11[, Percent := rd(Count/nParticipants * 100, 2)]
+colnames(t.a11) <- c("Response", "Number", "Percent")
+tab_caps("t.a11", caption = "Unheated living spaces in winter.")
+
+ft.a11 <- my.flex(t.a11)
+
+```
+
+`r tab_caps("t.a11")`
+```{r}
+#kable(t.a11)
+ft.a11
+```
+
+
+
+
+### A12: We would now like you to tell us about the main way in which water from your hot water taps and shower, if you have one, is heated. 
+*Note: 'electric heater' includes heat pump, immersion heater, other electric heating sources. Tick all that apply.*
+
+```{r A12, include = FALSE}
+a12.resp <- c("A12_Taps_GB", "A12_Taps_EH", "A12_Taps_SWH", "A12_Taps_Other", "A12_Taps_NA", "A12_Taps_DK",
+              "A12_Shower_GB", "A12_Shower_EH", "A12_Shower_SWH", "A12_Shower_Other", "A12_Shower_NA", 
+              "A12_Shower_DK")
+a12.tots <- rep(0, 12)
+for(i in 1:12){
+  a12.tots[i] <- sum(survey_reordered[, get(a12.resp[i]) == 1])
+}
+
+t.a12 <- data.table(Source = c("Gas Boiler", "Electric Heater", "Solar water heater", "Other", 
+                               "Not applicable", "Don't know"),
+                    Taps = a12.tots[1:6],
+                    Shower = a12.tots[7:12]
+                    )
+tab_caps("t.a12", caption = "Number of participants who selected each source for their hot water taps and shower. " )
+tmp.taps <- survey_reordered[, .N, keyby = A12_Taps_sum]
+tmp.shower <- survey_reordered[, .N, keyby = A12_Shower_sum]
+colnames(tmp.taps) <- c("Options", "Taps")
+
+t.a12.options <- cbind(tmp.taps, tmp.shower$N)
+colnames(t.a12.options) <- c("Number of options selected", "Taps", "Shower")
+tab_caps("t.a12.options", caption = "Frequency data for selection of multiple hot water sources in A12 for each of taps and shower.")
+
+ft.a12 <- my.flex(t.a12)
+
+ft.a12.options <- my.flex(t.a12.options)
+```
+Participants were offered the chance to select multiple options for how their hot water is heated for their taps and shower (if they have one). `r tab_caps("t.a12", display = "cite")` shows the number of participants that selected each option. `r tab_caps("t.a12.options", display = "cite")` shows how many participants selected 0, 1, 2 or 3 sources in each case (3 was the most selected). 
+
+`r tab_caps("t.a12")`
+```{r}
+#kable(t.a12)
+ft.a12
+```
+
+`r tab_caps("t.a12.options")`
+```{r}
+#kable(t.a12.options)
+ft.a12.options
+```
+
+
+
+### A13: How often do you personally do each of the following?
+*Tick one answer only for each action below*
+
+#### Switch off lights in rooms that aren't being used?
+22 participants did not answer this question, while 1 participant responded 'Not applicable, cannot do this'. The other responses are shown in the figure below, which includes a comparison with the Understanding Society Wave 4 data. 
+```{r A13, include = FALSE}
+fig_caps("p.a13_01", caption = "How often do you personally switch off lights in rooms that aren't being used?")
+fig_caps(name = "p.a13_02", caption = "How often do you personally put more clothes on when feeling cold rather than putting the heating on or turning it up?")
+```
+
+`r fig_caps("p.a13_01")`
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+p.a13_01
+```
+
+#### Put more clothes on when feeling cold rather than putting the heating on or turning it up?
+19 participants did not answer this question, while 4 participants responded 'Not applicable, cannot do this'. The other responses are shown in the figure below, which includes a comparison with the Understanding Society Wave 4 data.
+
+`r fig_caps("p.a13_02")`
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+p.a13_02
+```
+
+
+
+### A14: How much effort, if any, would you say your household makes to limit or reduce the amount of gas or electricity used? 
+*Tick one answer only*
+
+17 participants did not answer this question. The figure below shows the results for those who did. Nearly half of respondents reported making some effort to limit/reduce energy consumption and nearly one quarter reported making a great deal of effort. 
+
+```{r A14, include = FALSE}
+fig_caps("p.a14", caption = "Responses to A14.")
+```
+
+`r fig_caps("p.a13_01")`
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+p.a13_01
+```
+
+### A15: How often will your household open the windows in your accommodation on the following types of days? On a typical cold day, on a typical warm day.
+*Tick one answer for each column.*
+
+33 participants did not respond about opening windows on cold days, 21 did not respond about opening windows on warm days. 
+
+```{r A15, include = FALSE}
+fig_caps("p.a15_01", caption = "How often windows are opened on a typical cold day")
+fig_caps("p.a15_02", caption = "How often windows are opened on a typical warm day")
+```
+
+`r fig_caps("p.a15_01")`
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+p.a15_01
+```
+
+`r fig_caps("p.a15_02")`
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+p.a15_02
+```
+
+### A16: Which of the following, if any, is your household considering replacing or adding to your heating or energy supply in the next 12 months? 
+*Tick all that apply.*
+
+```{r A16, include = FALSE}
+A16_opts <- rep(NA_character_, 9)
+A16_tot <- rep(0, 9)
+for(i in 1:9){
+  A16_opts[i] <- paste("A160", i, sep = "")
+  A16_tot[i] <- sum(survey_reordered[, get(A16_opts[i])])
+}
+A16_perc <- rd(A16_tot/nParticipants * 100, 2)
+t.a16 <- data.table(PossChange = c("Not considering any changes", "Not applicable - cannot do this", 
+                                   "Gas boiler", "Solar panels for electricity",
+                                   "Solar water heating", "Wood or solid fuel burning stove",
+                                   "Heat pump", "Micro combined heat and power unit", "Wind turbine"),
+                    Number = A16_tot,
+                    Percent = A16_perc
+                    )
+colnames(t.a16) <- c("Possible change", "Number", "Percent")
+tab_caps("t.a16", caption = "Number of responses to each option in A16 excluding 'Other, please specify'")
+
+ft.a16 <- my.flex(t.a16)
+```
+
+`r tab_caps("t.a16")`
+```{r}
+#kable(t.a16)
+ft.a16
+```
+
+In addition, 47 participants selected 'Other, please specify'. What might be considered 'valid' responses included: electric shower, electric heater, oil boiler, wall-mounted energy efficient panel heater, new thermostat, battery storage and electric storage heater. Some responses focused on how the energy is consumed rather than generated, such as loft insulation, heated porch floors, heated towel rail, new fireplace for electric fire and smart radiator valves.
+
+In addition, just under 10 took the opportunity to mention already having solar panels. Not all text was legible, and some was in Welsh (to be translated). Some mentioned changing supplier or tariff, some mentioned that they rent. Mentioning recent changes was also a popular comment. 
+
+
+## Section B Questions: "About your accommodation"
+
+### B1: What type of accommodation do you live in?
+*Tick one answer only*
+
+`r survey_counts[Variable == "B1" & Source == "Pilot Survey" & Value == -2, Count]` participants did not answer this question. For those who did, we can compare their responses with the 2011 Census. 
+
+```{r B1, include=FALSE}
+fig_caps(name = "p.b1", caption = "Responses to B1 compared with Census data.")
+```
+
+`r fig_caps("p.b1")`
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, fig.cap = "Type of accommodation", echo = FALSE, message = FALSE, warning = FALSE}
+p.b1
+```
+
+### B2: Is your accommodation self-contained?
+*By this we mean that all the rooms, including the kitchen, bathroom and toilet, are behind a door that only your household can use. Tick one answer only.*
+```{r B2, include=FALSE}
+t.b2 <- data.table(Response = c("Yes", "No", "No Answer"), 
+                   Number = c(survey_counts[Variable == "B2" & Value == 1,  Count],
+                              survey_counts[Variable == "B2" & Value == 2,  Count],
+                              survey_counts[Variable == "B2" & Value == -2,  Count])
+                   )
+t.b2[, Percent := rd(Number/nParticipants * 100, 2)]
+tab_caps("t.b2", caption = "Responses to B2. Note that the full 'Yes' option reads 'Yes, all the rooms are behind a door that only my household can use'.")
+
+ft.b2 <- my.flex(t.b2)
+```
+
+`r tab_caps("t.b2")`
+```{r}
+#kable(t.b2)
+ft.b2
+```
+
+### B3: How many other households do you share with at the moment?
+*Write in number below. Not applicable to those who said their accommodation was self-contained.*
+
+```{r B3, include = FALSE}
+t.b3 <- survey_reordered[, .N, keyby = B3]
+colnames(t.b3) <- c("Response", "Number")
+t.b3[, Response := c("Not applicable", "No answer", "0", "1", "3")]
+tab_caps("t.b3", caption = "Number of other households sharing the dwelling.")
+ft.b3 <- my.flex(t.b3)
+```
+
+Surprisingly around 50 households responded to this question despite having answered that their accommodation was self-contained. Some had a very high number (in the tens), possibly relating to other flats in a building. These responses were removed to align with the online survey which automatically skips the question in this case. Despite 11 households reportedly living in non-self-contained accommodation, 6 went on to report sharing with no other households. 
+
+`r tab_caps("t.b3")`
+```{r}
+ft.b3
+```
+
+### B4: Do you (or your household) own or rent this accommodation?
+*Tick one answer only.* 
+
+```{r B4, include = FALSE}
+
+survey_counts[Variable == "B4" & Value == 3, Label := "Rent privately"]
+survey_counts[Variable == "B4" & Value == 4, Label := "Rent from council (local authority) or houshing association"]
+
+label_angle = 45
+p.b4b <- ggplot(data = survey_counts[Variable == "B4" & Source == "Pilot Survey" 
+                                     & Value %in% c(-2, 1:15)], 
+                aes(x = reorder(Label, Value), y = Percent)) + 
+      geom_bar(stat = "identity", position = position_dodge(), fill = "steelblue") + 
+      geom_text(aes(label = Count), vjust = -0.3, size = geom.text.size) +
+      theme(axis.text.x = element_text(angle = label_angle, hjust = label_angle*0.5/45+0.5)) +
+      labs(x = "Response") +
+      theme(text = element_text(size = font.size)) +
+      scale_x_discrete(labels = c("No answer", 
+                              "Own it outright / \nbuying it with a \nmortgage/loan",
+                              "Part own and part rent \n(shared ownership)",
+                              "Rent privately",
+                              "Rent From council \n(local authority) or \nhousing association",
+                              "Live here \nrent free")) + 
+      scale_y_continuous(limits = c(0,90))
+fig_caps("p.b4b", caption = "Responses to B4.")
+fig_caps(name = "p.b4", caption = "Comparing owning versus renting with Census and Understanding Society Wave 9 data.")
+```
+
+`r fig_caps("p.b4b")`
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, fig.cap = "Type of accommodation", echo = FALSE, message = FALSE, warning = FALSE}
+p.b4b
+```
+
+The Census and Understanding Society aggregate their data differently, so we've reduce our data to either owning (including part own and part rent) and renting (including living rent-free). 
+
+`r fig_caps("p.b4")`
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, fig.cap = "Type of accommodation", echo = FALSE, message = FALSE, warning = FALSE}
+p.b4
+```
+
+### B5: How many rooms are available for use only by this household? 
+*Do NOT count bathrooms, toilets, halls or landings, rooms that can only be used for storage such as cupboards. Count all other rooms, for example kitchens, living rooms, utility rooms, bedrooms, studies, conservatories. If two rooms have been converted into one, count them as one room. Write in number below.*
+
+22 participants did not answer this question. 6 responses were deemed invalid due to reporting fewer rooms in B5 than bedrooms in question B6. One reported 0 rooms and this was cleaned to no response. The most number of rooms reported was 21. 
+
+
+```{r B5, include = FALSE}
+p.b5 <- ggplot(survey_reordered[B5>0,], aes(x = B5)) + 
+  geom_histogram(binwidth = 1, color = "darkblue", fill = "steelblue") + 
+  theme(text = element_text(size = font.size)) +
+  labs(x = "Number of rooms")
+fig_caps("p.b5", caption = "Responses to B5 excluding no answer and invalid answers.")
+```
+
+`r fig_caps("p.b5")`
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, fig.cap = "Type of accommodation", echo = FALSE, message = FALSE, warning = FALSE}
+p.b5
+```
+
+### B6: How many of these rooms are bedrooms?
+*Include all rooms built or converted for use as bedrooms, even if they are not currently used as bedrooms. Write in number below.*
+
+20 participants did not answer this question. Those 6 who had 'invalid' responses recorded for B5 also had their B6 responses recorded as invalid (more bedrooms than rooms). The most bedrooms recorded was 8. Anyone recording 0 bedrooms (2 participants) had their response changed to 1 bedroom as this is the approach taken in the Census. 
+
+```{r B6, include = FALSE}
+p.b6 <- ggplot(survey_reordered[B6>0,], aes(x = B6)) + 
+  geom_histogram(binwidth = 1, color = "darkblue", fill = "steelblue") + 
+  theme(text = element_text(size = font.size)) +
+  labs(x = "Number of bedrooms")
+fig_caps("p.b6", caption = "Responses to B6 excluding no answer and invalid answers.")
+```
+
+`r fig_caps("p.b6")`
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, fig.cap = "Type of accommodation", echo = FALSE, message = FALSE, warning = FALSE}
+p.b6
+```
+
+### B7: During the cold winter weather, can you normally keep comfortably warm in your living room? 
+*Tick one answer only.*
+
+
+
+```{r B7, include = FALSE}
+t.b7 <- survey_counts[Variable == "B7", c("Label", "Count", "Percent")]
+t.b7 <- t.b7[c(3,4,2,1),]
+t.b7[, Percent := rd(Count/nParticipants * 100, 2)]
+colnames(t.b7) <- c("Response", "Number", "Percent")
+tab_caps("t.b7", caption = "Responses to question B7.")
+
+ft.b7 <- my.flex(t.b7)
+```
+
+`r tab_caps("t.b7", display = "cite")` shows the responses to this question. Of those who answered yes or no, 93.7% answered yes, only a little lower than the Understanding Society sample, of which 95.7% answered yes. 
+
+`r tab_caps("t.b7")`
+```{r}
+#kable(t.b7)
+ft.b7
+```
+
+### B8: Do you have any problems with condensation, damp or mould in your home?
+*Tick one answer only.*
+
+This question was also asked in the 2017 English Housing Survey (EHS). 3.8% of their sample reported problems with condensation, damp or mould (percentage includes non-response etc.), much lower than our 18.5%. The EHS is a face-to-face survey, so it is possible that the assessor talked to the participant about what constitutes a problem with damp or mould and discounted issues that people report on a self-completion survey, but this is only a hypothesis. 
+
+```{r B8, include = FALSE}
+t.b8 <- survey_counts[Variable == "B8", c("Label", "Count", "Percent")]
+t.b8 <- t.b8[c(3,4,2,1),]
+#t.b8[, Percent := rd(Count/nParticipants * 100, 2)]
+colnames(t.b8) <- c("Response", "Number", "Percent")
+tab_caps("t.b8", caption = "Responses to question B8.")
+
+
+ft.b8 <- my.flex(t.b8)
+```
+
+`r tab_caps("t.b8")`
+```{r}
+#kable(t.b8)
+ft.b8
+```
+
+### B9: Approximately when do you think your accommodation was built?
+*Tick one answer only.*
+
+```{r B9, include = FALSE}
+p.b9 <- plot.survey.data(v = "B9")
+fig_caps("p.b9", caption = "Response to B9.")
+```
+`r fig_caps("p.b9")`
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, fig.cap = "Type of accommodation", echo = FALSE, message = FALSE, warning = FALSE}
+p.b9
+```
+
+### B10: Can we check if you have any of the following appliances in your accommodation?
+*Tick all that apply.*
+
+```{r B10, include = FALSE}
+b10.opts <- rep(NA_character_, 14)
+b10.n <- rep(0,14)
+for(i in 1:14){
+  if(i < 10){b10.opts[i] <- paste("B100",i,sep = "")
+  }else{b10.opts[i] <- paste("B10",i,sep = "")}
+  b10.n[i] <- survey_reordered[, sum(get(b10.opts[i]))]
+}
+
+t.b10 <- data.table(Appliance = c("Electric oven", "Gas oven", "Electric hob", "Gas hob", "Dishwasher", "Fridge or combined fridge freezer", "Separate stand-alone freezer", "Combined clothes washer dryer", "Washing machine", "Tumble dryer", "Laptop/computer", "TV", "Air conditioning unit", "Cooling fan"),
+                    Number = b10.n)
+t.b10[, Percent := rd(Number/nParticipants*100,2)]
+
+tab_caps("t.b10", caption = "Appliance ownership.")
+
+
+ft.b10 <- my.flex(t.b10)
+```
+
+`r tab_caps("t.b10")`
+```{r}
+#kable(t.b10)
+ft.b10
+```
+
+
+## Section C questions
+
+### C1: How many people currently live in your household, including you? 
+*Please include all those who are there regularly, even if not every day, including children who live away from home during term time. Write in number below.*
+
+```{r C1, include=FALSE}
+
+p.c1 <- ggplot(survey_reordered[C1_new > 0,], aes(x = C1_new)) + 
+  geom_histogram(binwidth = 1, color = "darkblue", fill = "steelblue") + 
+  labs(x = "Number of occupants") +
+  theme(text = element_text(size = font.size)) +
+  scale_x_continuous(breaks = 1:10, lim = c(0, 10))
+fig_caps("p.c1", caption = "Number of occupants")
+```
+
+29 participants did not answer this question. The responses are shown in the plot below. The most occupants reported was 9 (reported by 1 household). 
+
+`r fig_caps("p.c1")`
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+p.c1
+```
+
+### C2: Including you, how many males and females are there in each of the following age groups in your household?
+*Write in numbers below for each (if there is nobody in a category you can leave it blank).*
+
+```{r C2, include=FALSE}
+t.c2.children <- survey_reordered[, .N, keyby = C2_tot_child]
+t.c2.children[, Percent := rd(N/nParticipants*100, 2)]
+t.c2.children$C2_tot_child <- as.character(t.c2.children$C2_tot_child)
+t.c2.children[1, C2_tot_child := "No answer"]
+colnames(t.c2.children) <- c("Number of children", "Number", "Percent")
+tab_caps("t.c2.children", caption = "Number of children (under 16yrs) in each household.")
+
+ft.c2.children <- my.flex(t.c2.children)
+
+t.c2.adult <- survey_reordered[, .N, keyby =C2_tot_adult]
+t.c2.adult[, Percent := rd(N/nParticipants*100, 2)]
+t.c2.adult$C2_tot_adult <- as.character(t.c2.adult$C2_tot_adult)
+t.c2.adult[1, C2_tot_adult := "No answer"]
+colnames(t.c2.adult) <- c("Number of adults", "Number", "Percent")
+tab_caps("t.c2.adult", caption = "Number of adults (16+ yrs) in each household.")
+
+ft.c2.adult <- my.flex(t.c2.adult)
+
+t.c2.65plus <- survey_reordered[, .N, keyby = C2_tot_65_plus]
+t.c2.65plus[, Percent := rd(N/nParticipants*100, 2)]
+t.c2.65plus$C2_tot_65_plus <- as.character(t.c2.65plus$C2_tot_65_plus)
+t.c2.65plus[1, C2_tot_65_plus := "No answer"]
+colnames(t.c2.65plus) <- c("Number aged 65+ yrs", "Number", "Percent")
+tab_caps("t.c2.65plus", caption = "Number of people aged 65+ in each household.")
+
+ft.c2.65plus <- my.flex(t.c2.65plus)
+
+```
+
+There are many ways of summarising this data. Three tables are presented, describing the number of children, number of adults and number of people in the 65+ yrs category. This question has more data quality issues than other questions, for example, 12 households report having no one aged 16+, yet clearly this cannot be the case.  
+
+```{r C2b, include = FALSE}
+# Store the number of males and females recorded
+survey_reordered[, males :=  sapply(1:nParticipants, 
+                                function(x) sum.positive(survey_reordered[x , C2_Male_0_15:C2_Male_85_plus]))]
+
+survey_reordered[, females :=  sapply(1:nParticipants, 
+                                function(x) sum.positive(survey_reordered[x , C2_Female_0_15:C2_Female_85_plus]))]
+
+C2_no_error <- survey_reordered[C2_error == FALSE, .N]
+
+avg_males <- survey_reordered[C2_error == FALSE, sum(males)]/C2_no_error
+avg_females <- survey_reordered[C2_error == FALSE, sum(females)]/C2_no_error
+
+```
+
+The average number of males per household is `r rd(avg_males, 2)` and the average number of females is `r rd(avg_females, 2)`.
+
+`r tab_caps("t.c2.children")`
+```{r}
+#kable(t.c2.children)
+ft.c2.children 
+```
+
+`r tab_caps("t.c2.adult")`
+```{r}
+ft.c2.adult
+```
+
+`r tab_caps("t.c2.65plus")`
+```{r}
+ft.c2.65plus
+```
+
+### C3: Thinking about the working situation of each member of your household aged 16 and over, including you, how many would you say fall into each category below? 
+*Write in numbers below for each row (if there is nobody in a category you can leave it blank).*
+
+This question also had more data quality issues than most. Some errors were easy to correct, such as the number of hours worked per week given instead of the number of people working 30+ hours. Or double-tapping a number key. The sum of people reported in this question was compared with the number of occupants stated in C1. 
+
+```{r C3, include = FALSE}
+
+survey_reordered[, C3_noresp := (C301 <= 0 & C302 <= 0 & C303 <= 0 & C304 <= 0 & C305 <= 0 
+                             & C306 <= 0 & C307 <=0)]
+
+t.c3 <- data.table(category = c("Working (paid or unpaid): 30 hours a week or  more",
+                                "Working (paid or unpaid): less than 30 hours a week",
+                                "Not working because of long term sickness or disability",
+                                "Unemployed but seeking work",
+                                "Student",
+                                "Retired/at home/not seeking work*",
+                                "Other"),
+                   zero = rep(NA_integer_, 7),
+                   one = rep(NA_integer_, 7),
+                   two = rep(NA_integer_, 7),
+                   three = rep(NA_integer_, 7),
+                   four = rep(NA_integer_, 7),
+                   five = rep(NA_integer_, 7)
+                   )
+
+for(i in 1:7){
+  for(j in 0:5){
+    if(j == 0) {
+      t.c3[i, 2 + j := survey_reordered[get(paste("C30",i,sep = "")) <= 0, .N]]
+    } else {
+      t.c3[i, 2+j := survey_reordered[get(paste("C30",i,sep = "")) == j, .N]]
+    }
+  }
+}
+
+for(i in 1:7){
+  for(j in 0:5){
+    if(j == 0) {
+      t.c3[i, 2 + j := survey_reordered[get(paste("C30",i,sep = "")) <= 0 & C3_error == FALSE, .N]]
+    } else {
+      t.c3[i, 2+j := survey_reordered[get(paste("C30",i,sep = "")) == j & C3_error == FALSE, .N]]
+    }
+  }
+}
+
+
+colnames(t.c3) <- c("Employment status", 0:5)
+tab_caps("t.c3", caption = "Number of households with each number of people reported in each working status category. 76 did not respond with any status, 70 responses were classed as errors.")
+ft.c3 <- my.flex(t.c3)
+ft.c3 <- fit_to_width(ft.c3, max_width = 6.5)
+
+```
+
+`r tab_caps("t.c3", display = "cite")` shows the number of households reporting each number of occupants by working status. For example, 851 households do not have anyone working more than 30 hours per week. One household has 5 occupants who are all students. 
+
+
+`r tab_caps("t.c3")`
+```{r}
+ft.c3
+```
+*(including looking after the home or family)
+
+
+### C4: Including you, how many people in your household hold a degree (e.g. BA, BSc) or higher qualification (e.g. MA, PhD, PGCE)?
+*Write in number below (if nobody has this qualification you can write in zero).*
+
+```{r C4, include=FALSE}
+p.c4 <- ggplot(survey_reordered[C4_error == FALSE, .N, keyby = C4],
+                aes(x = factor(C4), y = N)) + 
+  geom_bar(stat = "identity", position = position_dodge(), fill = "steelblue") +
+  labs(x = "Number of people with a degree") + 
+  scale_x_discrete(labels = c("No answer", "Don't know/\nprefer no to say", "0", "1", 
+                              "2", "3", "4")) + 
+  theme(text = element_text(size = font.size)) + 
+  labs(y = "Count")
+fig_caps("p.c4", "Number of households with each number of qualified people.")
+```
+Two households reported data deemed invalid (with 4 and 7 qualified people respectively, greater than the number of occupants). This indicates that other data may be invalid that is not clear from the data, such as writing the number of qualifications of one person, rather than the number of qualified people. 
+
+`r fig_caps("p.c4")`
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+p.c4
+```
+
+### C5: Does your household have a plug-in electric vehicle? 
+*This does not include hybrid cars which are not plugged-in to charge. Tick one answer only.*
+
+```{r C5, include = FALSE}
+t.c5 <- survey_counts[Variable == "C5", c("Label", "Count", "Percent")]
+t.c5 <- t.c5[c(3,4,2,1),]
+t.c5[, Percent := rd(Count/nParticipants * 100, 2)]
+colnames(t.c5) <- c("Response", "Number", "Percent")
+tab_caps("t.c5", caption = "Presence of a plug-in electric vehicle.")
+ft.c5 <- my.flex(t.c5)
+```
+
+`r tab_caps("t.c5")`
+```{r}
+ft.c5
+```
+
+### C6: When does your household tend to charge your electric vehicle at home?
+*Not applicable if respondent answered 'no' or 'don't know' to C5 (do you have a plug-in electric vehicle). Tick one answer only.*
+
+```{r C6, include=FALSE}
+survey_counts[Variable == "C6" & Value == 4, Label := "Varies - whenever it's needed"]
+survey_counts[Variable == "C6", Percent := rd(Count/nParticipants * 100)]
+survey_counts[Variable == "C6", 
+              PercentOfAnswered := rd(Count/survey_counts[Variable == "C6" & Value >=-1, sum(Count)] *100)]
+studyV <- "C6"
+
+p.c6 <- plot.survey.data(onlyPercentOfAnswered = TRUE, 
+                         selectPercentOfAnswered = c(-2, -1, 1:5)) + 
+  scale_x_discrete(labels = c("No answer", "Don't know",
+                              "Mostly overnight \n(8pm to 7am)",
+                              "Mostly during the day \n(7am to 4pm)",
+                              "Mostly in the evening \n(4pm to 8pm)",
+                              "Varies-whenever \nit's needed",
+                              "Not applicable, \ncharging is not done \nat home (e.g. at work)")) +
+  scale_y_continuous(limits = c(0, 55))
+
+fig_caps("p.c6", caption = "Charging times for plug-in electric vehicles.")
+```
+
+`r fig_caps("p.c6")`
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+p.c6
+```
+
+## Section D Questions: "About you"
+
+Single-occupancy households could skip questions D1 - D3 as the information had been previously collected.
+
+### D1: Which of these age groups do you fall into?
+*Tick one answer only.*
+
+The data for this question includes data provided by single-occupancy households to question C2 where available. 
+
+```{r D1, include=FALSE}
+tmp1 <- survey_reordered[, .N, keyby = D1_new]
+tmp2 <- survey_counts[Variable == "D1"]
+tmp2[, Variable := "D1_new"]
+tmp2[, Count := 0]
+for(i in tmp1$D1_new){
+  tmp2[Value == i, Count := tmp1[D1_new == i, N]]
+}
+tmp2[, Percent := Count/nParticipants*100]
+p.d1 <- plot.survey.data(d = tmp2[Value > -9], v = "D1_new", label_angle = 0) + 
+  labs(x = "Age (years)")
+fig_caps("p.d1", caption = "Age of survey respondent.")  
+```
+
+`r fig_caps("p.d1")`
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+p.d1
+```
+
+### D2: Which of the following best describes how you think of yourself?
+*Tick one answer only*
+
+```{r D2, include=FALSE}
+
+survey_reordered[, D2b := D2]
+survey_reordered[D2 %in% c(-9, -2) & C1 == 1 & males == 1 & females == 0, D2b := 1]
+survey_reordered[D2 %in% c(-9, -2) & C1 == 1 & males == 0 & females == 1, D2b := 2]
+
+tmp1 <- survey_reordered[, .N, keyby = D2b]
+tmp2 <- survey_counts[Variable == "D2"]
+tmp2[, Variable := "D2b"]
+tmp2[, Count := 0]
+for(i in tmp1$D2b){
+  tmp2[Value == i, Count := tmp1[D2b == i, N]]
+}
+tmp2 <- tmp2[Value != -1,]
+tmp2[Value == -2, Count := tmp2[Value %in% c(-2, -9), sum(Count)]]
+tmp2 <- tmp2[Value != -9]
+tmp2[, Percent := Count/nParticipants * 100]
+p.d2 <- plot.survey.data(d = tmp2, v = "D2b", label_angle = 0) + 
+  scale_x_discrete(labels = c("Prefer \nnot to say", "No answer", "Male", "Female",
+                              "In some \nother way"))
+fig_caps("p.d2", caption = "Gender reporting of survey respondent.")
+```
+
+This data includes the male/female answer provided in C2 for single-occupancy households (if they did not answer D2). Note that the online survey automatically skipped D2 for single-occupancy. Where this data was missing or invalid and no response was given for D2, this is recorded as 'no response' here. Males were more likely to be the person completing the survey than females, despite there being slightly more females in the sample (`r survey_reordered[C2_error == FALSE, sum(females)]` females compared to `r survey_reordered[C2_error == FALSE, sum(males)]` males - excluding missing and invalid responses to question C2).
+
+`r fig_caps("p.d2")`
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+p.d2
+```
+
+
+### D3: Which best describes your current employment situation?
+*Tick one answer only.*
+
+```{r D3, include=FALSE}
+
+survey_reordered[, D3b := D3]
+survey_reordered[D3 %in% c(-9, -2) & C1 == 1 & C3_error == FALSE & C301 == 1, D3b := 1]
+survey_reordered[D3 %in% c(-9, -2) & C1 == 1 & C3_error == FALSE & C302 == 1, D3b := 2]
+survey_reordered[D3 %in% c(-9, -2) & C1 == 1 & C3_error == FALSE & C303 == 1, D3b := 3]
+survey_reordered[D3 %in% c(-9, -2) & C1 == 1 & C3_error == FALSE & C304 == 1, D3b := 4]
+survey_reordered[D3 %in% c(-9, -2) & C1 == 1 & C3_error == FALSE & C305 == 1, D3b := 5]
+survey_reordered[D3 %in% c(-9, -2) & C1 == 1 & C3_error == FALSE & C306 == 1, D3b := 6]
+survey_reordered[D3 %in% c(-9, -2) & C1 == 1 & C3_error == FALSE & C307 == 1, D3b := 7]
+
+
+tmp1 <- survey_reordered[, .N, keyby = D3b]
+tmp2 <- survey_counts[Variable == "D3"]
+tmp2[, Variable := "D3b"]
+tmp2[, Count := 0]
+for(i in tmp1$D3b){
+  tmp2[Value == i, Count := tmp1[D3b == i, N]]
+}
+tmp2 <- tmp2[Value != -1,]
+tmp2[Value == -2, Count := tmp2[Value %in% c(-2, -9), sum(Count)]]
+tmp2 <- tmp2[Value != -9]
+tmp2[, Percent := Count/nParticipants * 100]
+p.d3 <- plot.survey.data(d = tmp2, v = "D3b") + 
+  scale_x_discrete(labels = c("Prefer not to say",
+                              "No answer",
+                              "Working (paid or unpaid) \n30 hours a week or more",
+                              "Working (paid or unpaid) \nless than 30 hours a week",
+                              "Not working because of \nlong-term sickness or disability",
+                              "Unemployed but \nseeking work",
+                              "Student",
+                              "Retired/at home/not seeking \nwork (including looking after \nthe home or family)",
+                              "Other")
+                   ) +
+  scale_y_continuous(limits = c(0, 50))
+
+fig_caps("p.d3", caption = "Employment situation reporting of survey respondent.")
+```
+
+`r fig_caps("p.d3")`
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+p.d3
+```
+
+### D4: How well would you say you are managing financially these days?
+*Tick one answer only. Would you say you are...*
+
+```{r D4caps, include = FALSE}
+fig_caps(name = "p.d4", caption = "How well would you say you yourself are managing financially?")
+```
+
+`r fig_caps("p.d4")`
+```{r fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, echo = FALSE, message = FALSE, warning = FALSE}
+p.d4
+```

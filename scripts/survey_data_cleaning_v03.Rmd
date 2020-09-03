@@ -1,0 +1,755 @@
+---
+title: "Pilot study survey data cleaning"
+author: "Ellen Webbon"
+date: "18 September 2019"
+output: word_document
+---
+
+# Start from 244
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(data.table)
+library(tidyverse)
+library(knitr)
+library(weathermetrics)
+```
+
+```{r Definitions, include = FALSE}
+
+#### Define variables ####
+useDirectory <- "S:/ENERGINST_EaB_Project_17_SMRP/Analysis"             # work here
+dataDirectory <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Pilot_survey/"  # keep data here
+filename <- "pilot_survey_data_1675.csv" # name of file to import (could be RData)
+importCsv <- TRUE                       # set to false if using RData
+loadRData <- FALSE                      # set to false if importing csv or data already loaded
+
+filename_questions <- "survey_questions.csv"
+loadQuestions <- TRUE
+
+filename_poss_resp <- "possible_responses.csv" # matches variables with possible response values and meaning
+loadPossResp <- TRUE
+
+cleanData <- TRUE
+
+#### Variable descriptions (for those not defined above) ####
+
+### tables
+
+## questions            table of Variable names and survey questions
+## poss_resp            table of variables, values and meanings ('label')
+## survey_clean         Cleaned survey data
+## survey_questions     Join of questions and poss_resp tables: Variable, value (response), meaning, question
+## survey_orig          Original imported survey data
+
+### other
+
+## freeText_variabes    survey questios that allow a free-text response option
+## lower.cel            lower boundary of plausible temperature set point range in deg C
+## lower.fah            lower boundary of plausible temperature set point range in deg F
+## nParticipants        number of rows in the original survey data
+## repeatedRows         number of rows repeated in survey_orig
+## upper.cel            upper boundary of plausible temperature set point range in deg C
+## upper.fah            upper boundary of plausible temperature set point range in deg F  
+
+
+```
+
+```{r functionDefinitions, include = FALSE}
+
+# Sum elements that are positive
+sum.positive <- function(x){
+  # x is a vector (or similar) of elements to be added (if positive)
+  sum(sapply(x, function(y) max(y, 0)))
+}
+
+# record the new response -4 indicating 'unusable' due to an error found, in (most likely) the survey_questions table
+ record.unusable.response <- function(var, table.to.edit = survey_questions) {
+    table.to.edit <- rbind(table.to.edit, table.to.edit[Variable == var][1])
+    i.last <- nrow(table.to.edit)
+    table.to.edit[i.last, Value := "-4"]
+    table.to.edit[i.last, Label := "Unusable"]
+    setkey(table.to.edit, Variable)
+    table.to.edit
+ }
+ 
+ fill.D1 <- function(r) {
+  # r is a row in survey_clean e.g. survey_clean[2,]
+
+  if(r[D1 > 0, .N] == 1) {
+    ans <- r$D1
+  } else if(r[C2_error == TRUE | C2_sum <= 0 | C1 != 1, .N] == 1) {
+    ans <- -2
+  } else if(r[C2_tot_child == 1, .N] == 1) {
+    ans <- 1
+  } else if(r[C2_Male_16_24 == 1 | C2_Female_16_24 == 1, .N] == 1) {
+    ans <- 2
+  } else if(r[C2_Male_25_44 == 1 | C2_Female_25_44 == 1, .N] == 1) {
+    ans <- 3
+  } else if(r[C2_Male_45_64 == 1 | C2_Female_45_64 == 1, .N] == 1) {
+    ans <- 4
+  } else if(r[C2_Male_65_74 == 1 | C2_Female_65_74 == 1, .N] == 1) {
+    ans <- 5
+  } else if(r[C2_Male_75_84 == 1 | C2_Female_75_84 == 1, .N] == 1) {
+    ans <- 6
+  } else if(r[C2_Male_85_plus == 1 | C2_Female_85_plus == 1, .N] == 1) {
+    ans <- 7
+  } else {ans <- r$D1}
+  ans
+}
+
+```
+
+```{r loadDataSetWd, include = FALSE}
+
+setwd(useDirectory)
+
+if(importCsv == TRUE) {
+  survey_orig <- as.data.table(fread(paste(dataDirectory, filename, sep = "")))
+  } else if (loadRData == TRUE) {
+  load(paste(dataDirectory, filename, sep = ""))
+  }
+
+if(loadQuestions == TRUE) {
+  questions <- as.data.table(fread(paste(dataDirectory, filename_questions, sep = "")))
+}
+
+if(loadPossResp == TRUE) {
+  poss_resp <- as.data.table(fread(paste(dataDirectory, filename_poss_resp, sep = ""),
+                                      na.strings = c("","NA")))
+  # deal with NAs in Variable column
+  temp.var <- poss_resp[1,Variable]
+  for(i in 2:nrow(poss_resp)) {
+    if(is.na(poss_resp[i,Variable])) {
+      poss_resp[i,Variable := temp.var]
+    }else{
+      temp.var <- poss_resp[i,Variable]
+    }
+  }
+  #get rid of superfluous extra row
+  poss_resp <- poss_resp[-331,]
+}
+
+#### Define new variables for basic stats #####
+nParticipants <- nrow(survey_orig)
+
+```
+
+```{r surveyQuestions, include = FALSE}
+
+#### Create table for all survey question information ####
+  
+  ### Merge survey questions and possible responses
+  setkey(questions, Variable)
+  setkey(poss_resp, Variable)
+  survey_questions <- poss_resp[questions]
+  
+  ### Identify (manually) which questions need what kind of error checking
+  survey_questions[, ErrorCheck := "None"]
+  survey_questions[Variable == "A5", ErrorCheck := "Range"] # Thermostat temperature
+  survey_questions[Variable == "B3", ErrorCheck := "Range"] # Number of households sharing
+  survey_questions[Variable == "B5", ErrorCheck := "Range"] # Number of rooms
+  survey_questions[Variable == "B6", ErrorCheck := "RangeCondition"] # Number of bedrooms <= Number of rooms
+  survey_questions[Variable == "C1", ErrorCheck := "Range"] # Number of occupants
+  survey_questions[Variable == "C2_Male_0_15", ErrorCheck := "RangeCondition"] # Sum of all C2 = number of occupants
+  survey_questions[Variable == "C301", ErrorCheck := "RangeCondition"] # Sum of all C3 <= number of occupants
+  survey_questions[Variable == "C4", ErrorCheck := "RangeCondition"] # Number with degree <= number of occupants
+  
+  ### Identify (manually) which questions may have more answers than the set provided e.g. free text
+  survey_questions[, freeText := FALSE]
+  freeText_variabes = c("A3_Other", "A5","A16_Other", "B3", "B5", "B6", "C1", "C2", "C3", "C4",
+                        "CELL", "QUINTILE", "LSOA", "REGION")
+  survey_questions[Variable %in% freeText_variabes, freeText := TRUE]
+  survey_questions[startsWith(Variable, "C2_") |
+                     startsWith(Variable, "C3"), 
+                   freeText := TRUE]
+  
+  ### get rid of NAs formed from merged cells in the original
+  for(i in 2:nrow(poss_resp)) {
+    if(is.na(poss_resp[i,1]) == TRUE) {
+      poss_resp[i,1] <- poss_resp[i-1,1]
+    }
+  }
+  
+  colnames(poss_resp) <- c("Variable", "Value", "Meaning")
+  colnames(questions) <- c("Variable", "Question")
+
+```
+
+```{r cleanData, include = FALSE}
+
+survey_clean <- copy(survey_orig)
+
+# Check for repeated rows 
+repeatedRows <- nrow(survey_orig) - length(unique(survey_orig$Respondent_ID))
+if(repeatedRows > 0) {message("Repeated rows")}
+
+# Clean data one question at a time
+
+#### A1 ####  
+sort(unique(survey_clean$A1))  # Fine
+
+#### A2 ####
+sort(unique(survey_clean$A2))  # Fine  
+  
+# Check A2 got skipped if necessary
+survey_clean[A1 == 2 & A2 != -9, .N] # 9, most of whom didn't answer
+survey_clean[A1 == 2 & A2 != -9, A2 := -9]
+
+#### A3 ####
+#sort(unique(survey_clean$A3))  # Multiple variables for A3   
+survey_clean[, A3_sum := A301 + A302 + A303 + A304 + A305 + A306 + A307 + A308 + A309 + A310]
+survey_clean[, .N, by = A3_sum] # 28 with no answer
+  
+# Check A3 for no central heating vs some
+A3.cols <- c("A301","A302","A303","A304","A305","A306","A307","A308","A309","A310")
+survey_clean[A301 == 1 & sum(get(A3.cols)) > 1, .N] # 18
+survey_clean[, A3_err := FALSE]
+for(i in 2:length(A3.cols)) {
+  survey_clean[A301 == 1 & get(A3.cols[i]) == 1, A3_err := TRUE]
+}
+# change the 'no central heating' to no for those with central heating
+survey_clean[A3_err == TRUE, A301 := 0]
+
+#### A4 ####
+
+# Check A4 got skipped if necessary
+survey_clean[A301 == 1 & A401 != -9, .N] # 7
+
+# change 0 to -9 in A401:A406 for those with no central heating
+for(i in 1:6) {
+  survey_clean[A301 ==1, paste("A40",i, sep = "") := -9]
+}
+
+# get a sum to record no response (when one was possible)
+survey_clean[, A4_sum := A401 + A402 + A403 + A404 + A405 + A406]
+survey_clean[, .N, by = A4_sum] # 25 with no answer
+
+# Check no 'none of these' plus something else
+survey_clean[A405 == 1 & A4_sum > 1, .N] # 1 
+survey_clean[A405 == 1 & A4_sum > 1, A405 := 0] # get rid of 'none of these' since one has been selencted
+
+#### A5 ####
+
+survey_clean[A402 !=1 & A403 != 1 & A5 > -1, .N] # 53
+survey_clean[A402 !=1 & A403 != 1, A5 := -9] # Replace don't know/not applicable, no answer and answer with -9 if not applicable
+
+# Convert number from assumed Fahrenheit to Celsius if relevant, record that number was edited
+survey_clean[, A5_edit := FALSE]
+upper.cel <- 35
+survey_clean[A5 > upper.cel, `:=`(A5 = fahrenheit.to.celsius(A5, round = 1),
+                                  A5_edit = TRUE)]
+survey_clean[A5_edit == TRUE, .N] # 23
+sort(unique(survey_clean$A5))
+
+#### A6 ####
+sort(unique(survey_clean$A6)) # Fine
+
+#### A7 ####
+sort(unique(survey_clean$A7)) # Fine
+
+# Check A7 skip
+survey_clean[A6 == 1 & A7 != -9, .N] # 365
+survey_clean[A6 == 1 & A7 != -9, .N, by = A7] # 3 non-existent heaters with their own source of fuel, 38 non-existent heaters without their own fuel, 324 no answer (should be -9 not -2)
+survey_clean[A6 == 1, A7 := -9]
+
+#### A8 ####
+sort(unique(survey_clean$A8)) # Fine
+
+# Check A8 skip
+survey_clean[A8 != -9 & (A6 == 1 | A7 == 2), .N] # 679
+survey_clean[A8 != -9 & A8 != -2 & (A6 == 1 | A7 == 2), .N] # 186
+
+survey_clean[A6 == 1 | A7 == 2, A8 := -9]
+
+#### A9 #### 
+# Multiple variables (A901 - A907)
+
+# Add variable for non-response
+survey_clean[, A9_sum := A901 + A902 + A903 + A904 + A905 + A906 + A907]
+survey_clean[, .N, by = A9_sum] # 21 with no response
+
+# Check none of these and something else hasn't been ticked
+survey_clean[A907 == 1 & A9_sum > 1, .N] # 0 all good
+
+#### A10 ####
+sort(unique(survey_clean$A10)) # Fine
+
+#### A11 ####
+sort(unique(survey_clean$A11)) # Fine
+
+#### A12 ####
+# 12 variables, half for taps, half for showers
+
+survey_clean[, A12_Taps_sum := A12_Taps_GB + A12_Taps_EH + A12_Taps_SWH + A12_Taps_Other + A12_Taps_NA + A12_Taps_DK]
+survey_clean[, A12_Shower_sum := A12_Shower_GB + A12_Shower_EH + A12_Shower_SWH + A12_Shower_Other + A12_Shower_NA + A12_Shower_DK]
+survey_clean[, .N, by = A12_Taps_sum] # 24 with no answer
+survey_clean[, .N, by = A12_Shower_sum] # 94 no answer
+
+#### A13 ####
+sort(unique(survey_clean[,A13_01])) # Fine
+sort(unique(survey_clean[,A13_02])) # Fine
+
+#### A14 ####
+sort(unique(survey_clean[,A14])) # Fine
+
+#### A15 ####
+sort(unique(survey_clean[,A1501])) # Fine
+sort(unique(survey_clean[,A1502])) # Fine
+
+#### A16 ####
+survey_clean[A1610 == 0 & A16_Other != "", A16_Other] # 14
+survey_clean[A16_Other == "BLANK" & A1610 == 0, A16_Other := ""] # 4 removed
+survey_clean[A16_Other != "", A1610 := 1]
+
+survey_clean[, A16_sum := A1601 + A1602 + A1603 + A1604 + A1605 + A1606 + A1607 + A1608 + A1609 + A1610]
+survey_clean[, .N, by = A16_sum] # 26 with no response
+
+survey_clean[A1601 == 1 & A16_sum > 1, .N] # 15
+survey_clean[A1601 == 1 & A16_sum > 1, A1601:A16_Other]
+survey_clean[A1601 == 1 & A1602 == 1, A1601 := 0]
+survey_clean[A1601 == 1 & A1604 == 1, A1601 := 0] # can't be both
+
+survey_clean[, A16_sum := A1601 + A1602 + A1603 + A1604 + A1605 + A1606 + A1607 + A1608 + A1609 + A1610]
+
+#### B1 ####
+sort(unique(survey_clean$B1)) # Fine
+
+#### B2 ####
+sort(unique(survey_clean$B2)) # Fine
+
+#### B3 #### 
+
+### Check B3: Number of households sharing
+sort(unique(survey_clean$B3)) 
+survey_clean[, .N, by = B3] # some households sharing, some with a ridiculous number
+
+survey_clean[B2 == 1 & B3 > 0, .N]# 52
+survey_clean[B2 == 1, B3 := -9]
+survey_clean[, .N, by = B3] # anomalies sorted out now
+
+#### B4 #### 
+sort(unique(survey_clean$B4)) # Fine
+
+#### B5 and B6 ####
+### B5
+sort(unique(survey_clean$B5)) # -2  0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 19 21
+
+### B6
+sort(unique(survey_clean$B6)) # -2  0  1  2  3  4  5  6  7 8
+
+### Compare for impossible combinations
+
+survey_clean[B5 < B6 & B5 != -2, B5:B6] # 6
+
+# Set up error flag
+survey_clean[, `:=`(B5_err = FALSE, B6_err = FALSE)]
+survey_clean[B5 < B6 & B5 != -2, `:=`(B5_err = TRUE, B5 = -4, B6_err = TRUE, B6 = -4)]
+
+# Add new response option to the survey questions
+survey_questions <- record.unusable.response("B5")
+survey_questions <- record.unusable.response("B6")
+
+nrow(survey_clean[B5 == 0]) # 1
+survey_clean[B5 == 0, `:=`(B5_err = TRUE, B5 = -2)]
+nrow(survey_clean[B6 == 0]) # 2 - change to 1 as in the Census
+survey_clean[B6 == 0, B6 := 1]
+
+
+#### B7 ####
+sort(unique(survey_clean$B7)) # Fine -2 -1  1  2
+
+#### B8 ####
+sort(unique(survey_clean$B8)) # Fine -2 -1  1  2
+
+#### B9 ####
+sort(unique(survey_clean$B9)) # Fine -2 -1  1  2  3  4  5  6  7
+
+#### B10 ####
+# Multiple variables B1001:B1014
+survey_clean[, B10_sum := B1001 + B1002 + B1003 + B1004 + B1005 + B1006 + B1007 + B1008 + B1009 +
+               B1010 + B1011 + B1012 + B1013 + B1014]
+survey_clean[, .N, by = B10_sum] # 22 with no response
+
+#### C1 ####
+
+### Check C1: number of occupants
+sort(unique(survey_clean$C1)) # 0:9
+survey_clean[C1 == 0, C1 := -2]
+
+### Check C2: number of males and females by age adds up to C1 (No. of occupants)
+
+## Create new variable, 'C2_sum'
+survey_clean[, C2_sum := sapply(1:nParticipants, 
+                                function(x) sum.positive(survey_clean[x, C2_Male_0_15:C2_Female_85_plus]))]
+survey_clean[C2_sum == 0, C2_sum := -2] # Deal with non-response
+
+## Take the difference to identify incorrect sum
+survey_clean[, C2_sum_diff := C2_sum - C1]
+survey_clean[C2_sum == -2, C2_sum_diff := 0]
+
+# Investigate
+#survey_clean[C2_sum_diff != 0, C1:C2_sum_diff][1:5]
+survey_clean[C2_sum_diff != 0, .N, by = C2_sum_diff]
+
+# Flag whether C2 data should be ignored with C2_Error
+survey_clean[, C2_error := FALSE]
+survey_clean[C2_sum != C1 & C2_sum != -2, C2_error := TRUE] # This will be corrected for special cases next
+
+# Create C1_new to 'correct' what we think the total number of occupants should be - this is now superfluous as don't want to correct
+survey_clean[, C1_new := as.integer(C1)]
+survey_clean[, C1_old := C1]
+
+# Gone off the following logic 
+#survey_clean[C2_sum_diff == 1, `:=`(C1_new = as.integer(C2_sum), C2_error = FALSE)] # didn't include themselves
+
+# Manually correct the numbers of people in each age/sex category when clear that age has been entered not number
+# This isn't ideal and doesn't scale but it may work out for the pilot study. 
+# Investigate 
+
+survey_clean[Respondent_ID == "AFDRAG81", `:=`(C2_Male_0_15 = 1,
+                                               C2_Male_25_44 = 1,
+                                               C2_Female_0_15 = 1,
+                                               C2_Female_25_44 = 1,
+                                               C2_error = FALSE)]
+survey_clean[Respondent_ID == "B32UPRT1", `:=`(C2_Male_45_64 = 1,
+                                               C2_Female_65_74 = 1,
+                                               C2_error = FALSE)]
+# H52LRF61: C2 error remains, since multiple categories filled but D answers imply only one occupant
+survey_clean[Respondent_ID == "JLK1XTM1", `:=`(C2_Male_25_44 = 2,
+                                               C2_error = FALSE)] # used tally notation, 2 looked like 11
+survey_clean[Respondent_ID == "LUVGEMJ1", `:=`(C2_Male_75_84 = 1,
+                                               C2_Female_75_84 = 1,
+                                               C2_error = FALSE)] 
+survey_clean[Respondent_ID == "SK9D2GE1", `:=`(C2_Male_45_64 = 1,
+                                               C2_error = FALSE)]
+survey_clean[Respondent_ID == "YC3X1WZ1", C2_error := FALSE] # just didn't fill in C1
+survey_clean[Respondent_ID == "YSH11521", C2_error := FALSE] # just didn't fill in C1
+
+#This doesn't seem to work
+#survey_clean[C2_sum - max(C2_Male_0_15,0) - max(C2_Female_0_15,0) == C1_new, .N] # no one forgot their kids
+
+
+# Recalculate the sum and sum difference
+survey_clean[, C2_sum := sapply(1:nParticipants, 
+                                function(x) sum.positive(survey_clean[x, C2_Male_0_15:C2_Female_85_plus]))]
+survey_clean[C2_sum == 0, C2_sum := -2] # Deal with non-response
+survey_clean[C1 != -2, C2_sum_diff := C2_sum - C1_new]
+
+# Add extra categories to make analysis easier
+survey_clean[, C2_tot_child := sapply(1:nParticipants, 
+                                function(x) sum.positive(survey_clean[x, c("C2_Male_0_15", "C2_Female_0_15")]))]
+survey_clean[C2_error == TRUE | C2_sum == -2, C2_tot_child := -2]
+
+survey_clean[, C2_tot_adult := sapply(1:nParticipants, 
+                                function(x) { 
+                                  sum.positive(survey_clean[x, c("C2_Male_16_24", "C2_Male_25_44", "C2_Male_45_64",
+                                                                 "C2_Male_65_74", "C2_Male_75_84", "C2_Male_85_plus",
+                                                                 "C2_Female_16_24", "C2_Female_25_44", "C2_Female_45_64",
+                                                                 "C2_Female_65_74", "C2_Female_75_84", "C2_Female_85_plus")
+                                                                      ])}
+                                )]
+survey_clean[C2_error == TRUE | C2_sum == -2, C2_tot_adult := -2]
+
+survey_clean[C2_tot_adult == 0, C2_error := TRUE]
+
+survey_clean[, C2_tot_65_plus := sapply(1:nParticipants, 
+                                function(x) sum.positive(survey_clean[x, c("C2_Male_65_74", "C2_Male_75_84", 
+                                                                           "C2_Male_85_plus", "C2_Female_65_74",
+                                                                           "C2_Female_75_84", "C2_Female_85_plus")]))]
+survey_clean[C2_error == TRUE | C2_sum == -2, C2_tot_65_plus := -2]
+
+# Don't record non-response as an error
+survey_clean[C2_sum == -2, C2_error := FALSE]
+
+# Investigate further
+survey_clean[C2_sum_diff != 0 & C1_new != -2 & C2_sum != -2, C1:C1_new]
+survey_clean[C2_sum_diff != 0 & C1_new != -2 & C2_sum != -2 & C2_sum > C1_new, C1:C1_new]
+survey_clean[C2_error == TRUE, .N] # 26
+survey_clean[C2_error == TRUE, C1:C1_new]
+survey_clean[C2_sum_diff > 10, ] # none
+
+#### C3 ####
+
+## Create new variable, 'C3_sum'
+survey_clean[, C3_sum := sapply(1:nParticipants, 
+                                function(x) sum.positive(survey_clean[x, C301:C307]))]
+
+## Take the difference to identify incorrect sum
+survey_clean[, C3_sum_diff := C3_sum - C2_tot_adult]
+
+# Flag whether C3 data should be ignored with C2_Error
+survey_clean[, C3_error := FALSE]
+survey_clean[C3_sum_diff > 0 & C2_tot_adult != -2, C3_error := TRUE] # This will be corrected for special cases next
+
+# If C2 is an error and C3_sum = C1 then can take as valid
+survey_clean[C2_error == TRUE & C3_sum == C1_new, C3_error := FALSE]
+# Investigate and manually correct where possible
+survey_clean[C3_sum_diff > 0 & C2_error == FALSE & C1_new != -2, 
+             c("C1_old", "C1_new", "C2_tot_adult", "C3_sum", "C3_sum_diff")]
+# got the issue that some people fall into 2 categories. Eg 2 retired people who also work paid or unpaid less than 30 hours per week
+
+
+# Correct obvious mistakes
+
+survey_clean[Respondent_ID == "CN27E331", `:=`(C306 = 1, C3_error = FALSE)] # only 1 person household
+survey_clean[Respondent_ID == "3FPM1891", `:=`(C306 = 2, C3_error = FALSE)] # 1 person
+survey_clean[Respondent_ID == "WWTCLHJ1", `:=`(C301 = 1, C3_error = FALSE)] # hours per week
+survey_clean[Respondent_ID == "S63UCVN1", `:=`(C302 = 1, C3_error = FALSE)]
+survey_clean[Respondent_ID == "XC85PCW1", `:=`(C302 = 1, C3_error = FALSE)] # had 11 for 1 person
+
+survey_clean[C3_error == TRUE, .N] #71
+
+#### C4 ####
+survey_clean[, C4_error := FALSE]
+survey_clean[C4 > C1_new & C1_new != -2, C4_error := TRUE] 
+survey_clean[C4_error == TRUE, .N] #2
+
+sort(unique(survey_clean$C4)) # -2 -1  0  1  2  3  4  7
+
+#### C5 ####
+sort(unique(survey_clean$C5)) # Fine -2 -1  1  2
+
+#### C6 ####
+sort(unique(survey_clean$C6)) # Fine -9 -2 -1  1  2  3  4
+survey_clean[C5 != 1 & C6 != -9, .N] # 33
+survey_clean[C5 != 1 & C6 != -9, C6 := -9] 
+
+# Skipping most D for now
+
+#### D1 ####
+survey_clean[D1 == -2 & C1 == 1, .N] # 69 should be coded as -9 (will then have data filled if available)
+
+survey_clean[, D1b := D1]
+
+# Use the fill.D1 function to populate D1 if valid answer in C2
+survey_clean[, D1b := sapply(1:nParticipants, function(x) fill.D1(survey_clean[x,]))]
+
+sort(unique(survey_clean$D1b))
+survey_clean[D1b == -9, .N] # 0
+survey_clean[D1b == -2, .N] # 39
+survey_clean[D1b == -2 & C1 == 1 & C2_error == FALSE, .N] # 12
+
+
+
+#### D4 ####
+sort(unique(survey_clean$D4))
+
+```
+
+
+```{r cleanSurvey_questions, include = FALSE}
+# Issue that survey responses are not all integers according to the questions doc, but they are in the data
+#sort(unique(survey_questions$Value))
+survey_questions[, Value.tmp := Value]
+survey_questions[, Value := as.integer(Value.tmp)]
+survey_questions[Value.tmp == "-1.00a", Value := -1]
+survey_questions[Value.tmp == "-1a", Value := -1]
+survey_questions[Value.tmp == "-2.00a", Value := -2]
+survey_questions[Value.tmp == "-2a", Value := -2]
+survey_questions[Value.tmp == "-3a", Value := -3]
+survey_questions[Value.tmp == "-9.00a", Value := -9]
+survey_questions[Value.tmp == "-9a", Value := -9]
+#sort(unique(survey_questions$Value))
+survey_questions[, Value.tmp := NULL]
+
+
+```
+
+```{r participantCumulativeReporting, include = FALSE}
+allSignups <- as.data.table(fread("S:/ENERGINST_EaB_Project_17_SMRP/Data/Sign-up_Summary/Participants_cumulative_reporting2.csv"))
+
+realConsenters <- allSignups[`TOP-LEVEL CATEGORY` %in% c("Active Consenter", "Active Consenter now withdrawn (COT)", 
+                                                         "Active Consenter now withdrawn (MultiMeter)") & 
+                               PARTICIPANT_TYPE == "Real",]
+
+realConsenters[, Incentive := "None"]
+realConsenters[CELL %in% c(2, 5, 8, 11), Incentive := "Conditional"]
+realConsenters[CELL %in% c(3, 6, 9, 12), Incentive := "Unconditional"]
+realConsenters[, Postal := 1]
+realConsenters[CELL > 6, Postal := 2]
+realConsenters[, MailingVersion := 1]
+realConsenters[CELL %in% c(4,5,6,10,11,12), MailingVersion := 2]
+
+realConsenters[, .N, keyby = .(IMD, Incentive)]
+
+realConsenters[, Consent_date := as.Date(substr(CONSENT_START_CANONICAL, start = 1, stop = 11), "%d-%b-%Y")]
+realConsenters[, Mailing := 2]
+realConsenters[Consent_date <= "2019-08-29", Mailing := 1]
+realConsenters[Consent_date > "2019-09-11" & Consent_date <= "2019-09-24", Mailing := 3]
+realConsenters[Consent_date > "2019-09-24", Mailing := 4]
+
+M <- 13
+W <- 12 # number of categories
+
+signupResponse <- data.table(Treatment_type = c(rep(NA_character_, M), rep("Incentive", 3*M), rep("Content", 2*M),
+                                                 rep("nPostal", 2*M), rep("MailingN", 4*M)),
+                             Treatment = c(rep(NA_character_, M),
+                                           rep("None",M), rep("Conditional", M), rep("Unconditional", M),
+                                           rep("V1", M), rep("V2", M), rep(1,M), rep(2, M),
+                                           rep("M1", M), rep("M2", M), rep("M3", M), rep("M4", M)),
+                             Split_by = rep(c(NA_character_, rep("IMD", 5), rep("Region", 7)), W),
+                             Category = rep(c(NA_character_, c(1:5),
+                                           c("East Midlands",  "East of England", "Greater London", "South East",
+                                              "South West", "Wales", "West Midlands")), W),
+                             Mailings_sent = NA_real_,
+                             Participants = NA_integer_)
+
+signupResponse[1, Mailings_sent := 18000]
+signupResponse[1, Participants := realConsenters[, .N]]
+
+signupResponse[2:6, Mailings_sent := c(2981, 3838, 3917, 3734, 3530)]
+signupResponse[2:6, Participants := realConsenters[, .N, keyby = IMD]$N]
+
+signupResponse[7:13, Mailings_sent := c(1970, 2506, 3580, 3674, 2443, 1471, 2356)]
+signupResponse[7:13, Participants := realConsenters[, .N, keyby = REGION]$N]
+
+## Incentives
+signupResponse[Treatment_type == "Incentive" & is.na(Split_by), Mailings_sent := 6000]
+
+for(i in c("None", "Conditional", "Unconditional")){
+  signupResponse[Treatment == i & is.na(Split_by), Participants := realConsenters[Incentive == i, .N]]
+  signupResponse[Treatment == i & Split_by == "IMD", Participants := realConsenters[Incentive == i, .N, keyby = IMD]$N]
+  signupResponse[Treatment == i & Split_by == "Region", Participants := realConsenters[Incentive == i, .N, keyby = REGION]$N]
+}
+
+signupResponse[Treatment == "None" & Split_by == "IMD", Mailings_sent := c(994, 1280, 1305, 1244, 1177)]
+signupResponse[Treatment == "Conditional" & Split_by == "IMD", Mailings_sent := c(994, 1279, 1307, 1244, 1176)]
+signupResponse[Treatment == "Unconditional" & Split_by == "IMD", Mailings_sent := c(993, 1279, 1305, 1246, 1177)]
+
+signupResponse[Treatment == "None" & Split_by == "Region", Mailings_sent := c(658, 835, 1193, 1225, 814, 490, 785)]
+signupResponse[Treatment == "Conditional" & Split_by == "Region", Mailings_sent := c(656, 836, 1193, 1225, 815, 489, 786)]
+signupResponse[Treatment == "Unconditional" & Split_by == "Region", Mailings_sent := c(656, 835, 1194, 1224, 814, 492, 785)]
+
+## Mailing content
+signupResponse[Treatment_type == "Content" & is.na(Split_by), Mailings_sent := 9000]
+
+for(i in c(1,2)){
+  signupResponse[Treatment == paste("V",i,sep = "") & is.na(Split_by), 
+                 Participants := realConsenters[MailingVersion == i, .N]]
+  signupResponse[Treatment == paste("V",i,sep = "") & Split_by == "IMD", 
+                 Participants := realConsenters[MailingVersion == i, .N, keyby = IMD]$N]
+  signupResponse[Treatment == paste("V",i,sep = "") & Split_by == "Region", 
+                 Participants := realConsenters[MailingVersion == i, .N, keyby = REGION]$N]
+}
+
+signupResponse[Treatment == "V1" & Split_by == "IMD", Mailings_sent := c(1490, 1920, 1958, 1867, 1765)]
+signupResponse[Treatment == "V2" & Split_by == "IMD", Mailings_sent := c(1491, 1918, 1959, 1867, 1765)]
+
+signupResponse[Treatment == "V1" & Split_by == "Region", Mailings_sent := c(986, 1252, 1791, 1837, 1221, 735, 1178)]
+signupResponse[Treatment == "V2" & Split_by == "Region", Mailings_sent := c(984, 1254, 1789, 1837, 1222, 736, 1178)]
+
+## Push to web
+signupResponse[Treatment_type == "nPostal" & is.na(Split_by), Mailings_sent := 9000]
+
+for(i in c(1,2)){
+  signupResponse[Treatment == i & is.na(Split_by), Participants := realConsenters[Postal == i, .N]]
+  signupResponse[Treatment == i & Split_by == "IMD", Participants := realConsenters[Postal == i, .N, keyby = IMD]$N]
+  signupResponse[Treatment == i & Split_by == "Region", Participants := realConsenters[Postal == i, .N, keyby = REGION]$N]
+}
+
+signupResponse[Treatment == 1 & Split_by == "IMD", Mailings_sent := c(1490, 1920, 1957, 1867, 1765)]
+signupResponse[Treatment == 2 & Split_by == "IMD", Mailings_sent := c(1491, 1918, 1960, 1867, 1764)]
+
+signupResponse[Treatment == 1 & Split_by == "Region", Mailings_sent := c(985, 1254, 1789, 1836, 1222, 736, 1178)]
+signupResponse[Treatment == 2 & Split_by == "Region", Mailings_sent := c(985, 1252, 1791, 1838, 1221, 735, 1178)]
+
+## Mailing number
+# approximate mailings sent
+
+for(i in 1:4) {
+  signupResponse[Treatment == paste("M",i,sep = ""), Mailings_sent := signupResponse[is.na(Treatment_type)]$Mailings_sent]
+  signupResponse[Treatment == paste("M",i,sep = "") & is.na(Split_by), 
+                 Participants := realConsenters[Mailing == i, .N]]
+  signupResponse[Treatment == paste("M",i,sep = "") & Split_by == "IMD", 
+                 Participants := realConsenters[Mailing == i, .N, keyby = IMD]$N]
+  signupResponse[Treatment == paste("M",i,sep = "") & Split_by == "Region", 
+                 Participants := realConsenters[Mailing == i, .N, keyby = REGION]$N]
+}
+
+
+
+signupResponse[, Percent := round(Participants / Mailings_sent * 100, 1)]
+
+signupResponse[Treatment_type == "Incentive" & Treatment == "None", PlotOrder := 1]
+signupResponse[Treatment_type == "Incentive" & Treatment == "Unconditional", PlotOrder := 2]
+signupResponse[Treatment_type == "Incentive" & Treatment == "Conditional", PlotOrder := 3]
+signupResponse[Treatment_type == "Content" & Treatment == "V1", PlotOrder := 1]
+signupResponse[Treatment_type == "Content" & Treatment == "V2", PlotOrder := 2]
+signupResponse[Treatment_type == "nPostal", PlotOrder := as.double(Treatment)]
+signupResponse[Treatment == "M1", PlotOrder := 1]
+signupResponse[Treatment == "M2", PlotOrder := 2]
+signupResponse[Treatment == "M3", PlotOrder := 3]
+signupResponse[Treatment == "M4", PlotOrder := 4]
+
+
+
+
+```
+
+
+```{r saveForAnalysis, include = FALSE}
+
+save(survey_reordered,
+     survey_clean,
+     signupResponse,
+     realConsenters,
+     allSignups,
+     survey_questions,
+     nParticipants,
+     filename,
+     useDirectory,
+     dataDirectory,
+     file = "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/survey_data_for_markdown.RData")
+
+```
+
+
+
+
+
+
+
+# Data cleaning decisions
+
+The responses from some questions can be double-checked against others to check for data quality issues. 
+
+## Number of residents and their age and gender
+
+Question C1 is *How many people currently live in your household, including you?* which can be combined with the results from question C2 *Including you, how many males and females are there in each of the following age groups in your household? (0-15, 16-24, 25-44, 45-64, 65-74, 75-84, 85+)* for quality checking.
+
+Mostly the sum of responses to C2 is equal to C1, but how best to deal with the data when they do not match? We make the following assumptions for the purposes of data cleaning:
+
+* If sum(C2) = C1 + 1 then the respondent did not include themselves in the initial total, and the number of occupants = sum(C2)
+
+* If sum(C2) = 0 then the number of occupants = C1 as question C2 was not answered
+
+* If sum(C2) = C1 + number of children then children were ignored in C1 and the number of occupants = sum(C2)
+
+* If sum(C2) > 18 and each (non-zero) response in C2 is a number in the age range, and the number of ranges with a non-zero number = C1 then the respondent filled in the age of the 1 person in each age/sex category, then all non-zero responses in C2 should be replaced by 1 and the number of occupants = C1
+
+* If none of these apply then the C2 data should be disregarded. 
+
+## Thermostat set points
+
+Question A5 is *What temperature do you set your controller to in the winter months for the late afternoons or evenings?* and a box is provided to write in a number, followed by a degrees C sign. We consider a plausible range (based on the data and common knowledge) to be [`r lower.cel`, `r upper.cel`] degrees C. Some data provided appears to have been given in Fahrenheit. Any data points within the plausible range after conversion to Fahrenheit [`r lower.fah`, `r upper.fah`] is converted into Celsius. `r survey_clean[A5_edit == TRUE, .N]` data points were converted in this way . Any points that are above the plausible range but not within the plausible Fahrenheit range are flagged as errors (`r survey_clean[A5_error == TRUE, .N]` point(s)). All edited data are recorded as edited in a new column. 
+
+## Number of rooms and bedrooms
+Remove data where number of rooms is less than number of bedrooms (`r survey_orig[B5 < B6, .N]` households). As in the Census, if number of bedrooms = 0, change to 1. 
+
+
+# Overall numbers
+
+There are currently `r nParticipants` in the survey dataset. Of these, `r survey_clean[Collection_Method == 1, .N]` completed the survey online and `r survey_clean[Collection_Method == 2, .N]` completed the survey on paper. 
+
+```{r countsTable, echo = FALSE, results = 'asis'}
+
+kable(merged.counts[, c("Variable", "Meaning", "N", "percentOfResponders", "totRespondKnow")], 
+      caption = "merged.counts")
+```
+
+
+
+
+
+

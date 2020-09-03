@@ -16,8 +16,8 @@ library(knitr)
 library(captioner)
 library(flextable)
 
-source("get.serl.filename.R")
-source("create.info.table.R")
+source("N:/R/observatoryData/scripts/get.serl.filename.R")
+source("N:/R/observatoryData/scripts/create.info.table.R")
 
 ```
 
@@ -26,7 +26,7 @@ source("create.info.table.R")
 release_version <- "2020_08"
 release_date <- "2020-08"
 
-load_epc <- FALSE # FALSE if using previously saved .RData
+load_epc <- TRUE # FALSE if using previously saved .RData
 write_epc <- FALSE # TRUE if we want to save a new csv data file
 
 epc_folder <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/EPC data/"
@@ -270,7 +270,13 @@ stats
 ```
 
 
+```{r save, include = FALSE}
 
+save(nrow_epc,
+     file = paste(saving_location, "RData files/epc_stats.RData", sep = "")
+)
+
+```
 
 
 

@@ -20,8 +20,8 @@ library(ggplot2)
 library(cowplot)
 library(scales)
 
-source("get.serl.filename.R")
-source("create.info.table.R")
+source("scripts/get.serl.filename.R")
+source("scripts/create.info.table.R")
 
 # Set figure defaults
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, dpi = 300)
@@ -77,7 +77,7 @@ if(load_table_data == FALSE) {
              sep = "")
        )
 } else {
-  load(paste(location_processed, "DQ_input.RData", sep = ""))
+  load(paste(location_processed, "/RData files/DQ_input.RData", sep = ""))
 }
 ```
 
@@ -925,7 +925,7 @@ if(load_table_data == FALSE) {
     n_id,
     summaries,
     monthly_plots,
-    file = paste(location_processed, "DQ_input.RData", sep = "")
+    file = paste(location_processed, "/RData files/DQ_input.RData", sep = "")
   )
 }
 
