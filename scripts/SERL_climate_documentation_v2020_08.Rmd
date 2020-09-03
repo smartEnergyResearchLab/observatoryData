@@ -15,44 +15,24 @@ library(lubridate)
 library(knitr)
 library(captioner)
 
-source("scripts/get.serl.filename.R")
-source("scripts/create.info.table.R")
+# Import all filenames, locations, source function files
+source("N:/R/observatoryData/scripts/setup_v2020_08.R")
 
 ```
 
 ```{r defineInputs, include = FALSE}
 
-load_climate <- FALSE
+load_climate <- TRUE
 write_climate <- FALSE
-
-release_version <- "2020_08"
-release_date <- "2020-08"
-
-climate_folder <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/Climate data/"
-saving_location <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/Observatory2020_08/Processed/"
-
-fig_caps <- captioner(prefix = "Figure")
-tab_caps <- captioner(prefix = "Table")
 
 ```
 
 ```{r loadData, include=FALSE}
 
-climate_filename <- get.serl.filename("climate_data", release_version)
-
-climate_file_dates <- c("Aug-Sep 2018",
-                        "Oct-Dec 2018",
-                        "Jan-Mar 2019",
-                        "Apr-Jun 2019",
-                        "Jul-Sep 2019",
-                        "Oct-Dec 2019",
-                        "Jan-Mar 2020")
-
-
 if(load_climate == TRUE) {
   climate_orig_list <- lapply(1:length(climate_file_dates), 
                        function(x) {
-                         fread(paste(climate_folder, 
+                         fread(paste(climate_location, 
                                      "Climate Data ",
                                      climate_file_dates[x],
                                      ".csv", 
@@ -78,23 +58,19 @@ setnames(climate,
          )
 
 save(climate,
-     file = paste(climate_folder, climate_filename, ".RData", sep = "")
+     file = paste(climate_location, climate_output_name, ".RData", sep = "")
      )
 
 } else {
-  load(paste(climate_folder, climate_filename, ".RData", sep = ""))
+  load(paste(climate_location, climate_output_name, ".RData", sep = ""))
 }
 
 if(write_climate == TRUE) {
   fwrite(climate,
-         file = paste(saving_location, "Final/", climate_filename, ".csv", sep = ""))
+         file = paste(location_processed, climate_output_name, ".csv", sep = ""))
 }
 
 
-```
-
-```{r docInfoTable, include = FALSE}
-info.tab <- create.info.table()
 ```
 
 ```{r}
@@ -116,7 +92,7 @@ tab_caps(name = "stats",
 
 This document describes the climate data provided with July 2020 SERL smart meter data release which originates from the Copernicus/ECMWF [ERA5 hourly reanalysis data](https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-single-levels?tab=overview). 
 
-More variables will be provided in future releases, but at the moment only temperature at 2 metres is part of the data. It can be linked with SERL participants using the 'gridCell' variable. The filename of this dataset is *`r paste(climate_filename, ".csv", sep = "")`*. This documentation will be expanded in future as more climate variables are provided with SERL datasets. 
+More variables will be provided in future releases, but at the moment only temperature at 2 metres is part of the data. It can be linked with SERL participants using the 'gridCell' variable. The filename of this dataset is *`r paste(climate_output_name, ".csv", sep = "")`*. This documentation will be expanded in future as more climate variables are provided with SERL datasets. 
 
 # Overview
 
@@ -126,6 +102,7 @@ The fields provided in the current SERL climate dataset are described in Table 1
 
 ```{r fieldsTable, include = FALSE}
 
+nrow_climate <- nrow(climate)
 ncol_climate <- ncol(climate)
 
 climate_fields <- data.table(columnNames = colnames(climate),
@@ -134,31 +111,35 @@ climate_fields <- data.table(columnNames = colnames(climate),
                             class = lapply(climate, class),
                             example = rep(NA_character_, ncol_climate))
 
-climate_fields[columnNames == "gridCell", `:=`(description = "Grid cell for linking to participant data",
-                                           units = "NA",
-                                           example = "38_31")]
 
-climate_fields[columnNames == "analysisDate", `:=`(description = "Date the data refers to",
-                                           units = "NA",
-                                           example = "2018-08-01")]
+climate_fields[columnNames == "gridCell",
+               `:=`(description = "Grid cell for linking to participant data",
+                    units = "NA",
+                    example = "38_31")]
 
-climate_fields[columnNames == "utcDateTime", `:=`(description = "Time and date of the data in UTC",
-                                           units = "%Y-%m-%d %H:%M:%S",
-                                           example = "2018-08-01 00:00:00")]
+climate_fields[columnNames == "analysisDate",
+               `:=`(description = "Date the data refers to",
+                    units = "NA",
+                    example = "2018-08-01")]
+
+climate_fields[columnNames == "utcDateTime",
+               `:=`(description = "Time and date of the data in UTC",
+                    units = "%Y-%m-%d %H:%M:%S",
+                    example = "2018-08-01 00:00:00")]
 
 
-climate_fields[columnNames == "temperature_2_metres_K", `:=`(description = "Temperature at 2 metres from the surface",
-                                           units = "deg K",
-                                           example = "285.12")]
+climate_fields[columnNames == "temperature_2_metres_K",
+               `:=`(description = "Temperature at 2 metres from the surface",
+                    units = "deg K",
+                    example = "285.12")]
 
 
-climate_fields[columnNames == "temperature_2_metres_C", `:=`(description = "Temperature at 2 metres from the surface converted into Celsius",
-                                           units = "deg C",
-                                           example = "12.12")]
-
+climate_fields[columnNames == "temperature_2_metres_C",
+               `:=`(description = "Temperature at 2 metres from the surface converted into Celsius",
+                    units = "deg C",
+                    example = "12.12")]
 
 colnames(climate_fields) <- c("Field", "Description", "Units", "Class", "Example value")
-
 
 ```
 
@@ -180,13 +161,18 @@ stats <- data.table(Statistic = c("Number of grid cells",
                     Value = rep(NA_character_, 6)
 )
 
-stats[Statistic == "Earliest read date", Value := as.character(climate[1, analysisDate])]
-stats[Statistic == "Latest read date", Value := as.character(climate[nrow(climate), analysisDate])]
-stats[Statistic == "Lowest temperature (deg C)", Value := climate[, min(temperature_2_metres_C)]]
-stats[Statistic == "Highest temperature (deg C)", Value := climate[, max(temperature_2_metres_C)]]
-stats[Statistic == "Mean temperature (deg C)", Value := climate[, round(mean(temperature_2_metres_C), 2)]]
-stats[Statistic == "Number of grid cells", Value := length(unique(climate$gridCell))]
-
+stats[Statistic == "Earliest read date", 
+      Value := as.character(climate[1, analysisDate])]
+stats[Statistic == "Latest read date", 
+      Value := as.character(climate[nrow(climate), analysisDate])]
+stats[Statistic == "Lowest temperature (deg C)", 
+      Value := climate[, min(temperature_2_metres_C)]]
+stats[Statistic == "Highest temperature (deg C)", 
+      Value := climate[, max(temperature_2_metres_C)]]
+stats[Statistic == "Mean temperature (deg C)", 
+      Value := climate[, round(mean(temperature_2_metres_C), 2)]]
+stats[Statistic == "Number of grid cells", 
+      Value := length(unique(climate$gridCell))]
 
 ```
 
@@ -195,5 +181,12 @@ stats[Statistic == "Number of grid cells", Value := length(unique(climate$gridCe
 kable(stats)
 ```
 
+```{r save, include = FALSE}
 
+save(nrow_climate,
+     ncol_climate,
+     file = climate_stats_file
+)
+
+```
 

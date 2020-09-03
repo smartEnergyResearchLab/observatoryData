@@ -1,9 +1,12 @@
 # This code prepares the survey data from the SERL pilot study for 
 #  exploratory analysis by SERL consortium researchers as part of the 
-#  initial static dataset release (May 2020).
+#  2020-08 SERL Observatory Data Release.
 
 # Code developed by Ellen Webborn, UCL using R version 3.6.2 (2019-12-12)
+# Most recent edits made 2020-09-03
 
+# For the latest versions of all code and documentation please visit the SERL
+#  GitHub page https://github.com/smartEnergyResearchLab
 
 
 # Setup -------------------------------------------------------------------
@@ -28,7 +31,6 @@ filename <- "pilot_survey_data_1675.csv"                                # name o
 filename_questions <- "survey_questions.csv"
 filename_poss_resp <- "possible_responses.csv" # matches variables with possible response values and meaning
 
-# *** survey_clean <- survey_clean[!(Respondent_ID %in% c("6SJU9MZ1", "J68J3U81"))] # Because they're blank
 
 # FunctionDefinitions -----------------------------------------------------
 
@@ -158,14 +160,22 @@ survey_questions <- poss_resp[questions]
 
 # Identify (manually) which questions need what kind of error checking
 survey_questions[, ErrorCheck := "None"]
-survey_questions[Variable == "A5", ErrorCheck := "Range"] # Thermostat temperature
-survey_questions[Variable == "B3", ErrorCheck := "Range"] # Number of households sharing
-survey_questions[Variable == "B5", ErrorCheck := "Range"] # Number of rooms
-survey_questions[Variable == "B6", ErrorCheck := "RangeCondition"] # Number of bedrooms <= Number of rooms
-survey_questions[Variable == "C1", ErrorCheck := "Range"] # Number of occupants
-survey_questions[Variable == "C2_Male_0_15", ErrorCheck := "RangeCondition"] # Sum of all C2 = number of occupants
-survey_questions[Variable == "C301", ErrorCheck := "RangeCondition"] # Sum of all C3 <= number of occupants
-survey_questions[Variable == "C4", ErrorCheck := "RangeCondition"] # Number with degree <= number of occupants
+survey_questions[Variable == "A5", 
+                 ErrorCheck := "Range"] # Thermostat temperature
+survey_questions[Variable == "B3", 
+                 ErrorCheck := "Range"] # Number of households sharing
+survey_questions[Variable == "B5", 
+                 ErrorCheck := "Range"] # Number of rooms
+survey_questions[Variable == "B6", 
+                 ErrorCheck := "RangeCondition"] # Number of bedrooms <= Number of rooms
+survey_questions[Variable == "C1", 
+                 ErrorCheck := "Range"] # Number of occupants
+survey_questions[Variable == "C2_Male_0_15", 
+                 ErrorCheck := "RangeCondition"] # Sum of all C2 = number of occupants
+survey_questions[Variable == "C301", 
+                 ErrorCheck := "RangeCondition"] # Sum of all C3 <= number of occupants
+survey_questions[Variable == "C4", 
+                 ErrorCheck := "RangeCondition"] # Number with degree <= number of occupants
 
 # Identify (manually) which questions may have more answers than the set provided e.g. free text
 survey_questions[, freeText := FALSE]
@@ -715,27 +725,6 @@ survey_clean[, .N, keyby = c("D3", "D3_new")] # only 16 couldn't have their answ
 # --- How well do you manage financially
 
 sort(unique(survey_clean$D4)) # -3 -2  1  2  3  4  5 Fine
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

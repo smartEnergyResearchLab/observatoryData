@@ -33,6 +33,7 @@ get.serl.filename <- function(file_identifier, version_id) {
   ## survey_code
   ## survey_data
   ## survey_questions
+  ## survey_responses
   ## readme
 
   if(file_identifier == "climate_data") {
@@ -65,8 +66,10 @@ get.serl.filename <- function(file_identifier, version_id) {
     name <- "survey_data"
   } else if(file_identifier == "survey_questions") {
     name <- "survey_questions"    
+  } else if(file_identifier == "survey_responses") {
+    name <- "survey_responses_summary"    
   } else if(file_identifier == "readme") {
-    name <- "readme"
+    name <- "README_data_and_documentation_summary"
   } else {print("Incorrect file identifier")}
   
   filename <- paste("SERL_", name, "_v", version_id, sep = "")

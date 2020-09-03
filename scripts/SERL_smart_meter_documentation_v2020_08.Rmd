@@ -20,8 +20,8 @@ library(flextable)
 library(officer)
 library(stringr)
 
-source("scripts/get.serl.filename.R")
-source("scripts/create.info.table.R")
+# Import all filenames, locations, source function files
+source("N:/R/observatoryData/scripts/setup_v2020_08.R")
 
 ```
 
@@ -29,20 +29,12 @@ source("scripts/create.info.table.R")
 
 load_table_data <- TRUE # TRUE if we've run this file before and don't want to re-process the data (only edit the text, formatting, etc.)
 
-release_version <- "2020_08"
-release_date <- "2020-08"
-collection_end_date <- ymd("2020-07-31")
-
-location_processed <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/Observatory2020_08/Processed/"
-
 min_n_to_determine_unit_error <- 30
 
 # Define plotting/reporting variables for the markdown output
 fig.h <- 6
 fig.w <- 10
 fullwidth <- TRUE
-fig_caps <- captioner(prefix = "Figure")
-tab_caps <- captioner(prefix = "Table")
 font.size <- 18
 geom.text.size <- 5
 
@@ -50,28 +42,12 @@ geom.text.size <- 5
 
 ```{r loadData, include = FALSE}
 if(load_table_data == FALSE) {
-  load(paste(location_processed, 
-             get.serl.filename("daily_data", release_version),
-             ".RData", 
-             sep = "")
-       )
-  load(paste(location_processed, 
-             get.serl.filename("hh_data", release_version),
-             ".RData", 
-             sep = "")
-       )
-  load(paste(location_processed, 
-             get.serl.filename("rt_data", release_version),
-             ".RData", 
-             sep = "")
-       )
-  load(paste(location_processed, 
-             get.serl.filename("ps_data", release_version),
-             ".RData", 
-             sep = "")
-       )
+  load(daily_processed_file)
+  load(hh_processed_file)
+  load(rt_processed_file)
+  load(ps_processed_file)
 } else {
-  load(paste(location_processed, "sm_data_documentation_input.RData", sep = ""))
+  load(sm_doc_input_file)
 }
 
 ```
@@ -153,10 +129,6 @@ if(load_table_data == FALSE) {
 
 sm_processing_filename <- get.serl.filename("sm_code", release_version)
 
-```
-
-```{r docInfoTable, include = FALSE}
-info_tab <- create.info.table()
 ```
 
 ```{r}
@@ -982,7 +954,7 @@ if(load_table_data == FALSE) {
     ncol_reads,
     nrow_pp,
     ncol_pp,
-    file = paste(location_processed, "sm_data_documentation_input.RData", sep = "")
+    file = sm_doc_input_file
   )
 }
 ```

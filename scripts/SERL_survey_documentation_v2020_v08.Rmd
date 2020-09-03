@@ -1,0 +1,388 @@
+---
+title: "Survey data:  \nTechnical documentation"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+  word_document:
+    reference_doc: SERL_word_template_landscape1.docx
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+# load relevant libraries
+library(data.table)
+library(tidyverse)
+library(knitr)
+library(captioner)
+library(lubridate)
+library(flextable)
+library(officer)
+
+# Import all filenames, locations, source function files
+source("N:/R/observatoryData/scripts/setup_v2020_08.R")
+
+load("S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/survey_data_for_markdown.RData")
+
+# Define plotting/reporting variables for the markdown output
+fig.h <- 6
+fig.w <- 10
+fullwidth <- TRUE
+fig_caps <- captioner(prefix = "Figure")
+tab_caps <- captioner(prefix = "Table")
+font.size <- 18
+geom.text.size <- 5
+dcp <- 2 # number of decimal places for rounding 
+
+```
+
+
+```{r}
+info_tab
+```
+
+```{r functions, include = FALSE}
+
+survey.flex <- function(t, autofit = TRUE) {
+  ft <- flextable(t)
+  ft <- theme_booktabs(ft)
+  ft <- border(ft, border.top = fp_border(color = "gray") )
+  #ft <- theme_box()
+  ft <- theme_zebra(ft, 
+                     odd_header = rgb(84/255, 141/255, 212/255, 1),
+                     )
+  ft <- color(ft, color = "white", part = "header")
+  ft <- italic(ft, italic = TRUE, part = "header")
+  ft <- bold(ft, bold = FALSE, part = "header")
+  if(autofit == TRUE) {
+    ft <- autofit(ft)
+  } else{
+    ft <- set_table_properties(ft, width = 1, layout = "autofit")
+  }
+  return(ft)
+}
+
+
+```
+
+
+
+
+# Introduction
+
+This document describes the survey responses data table. This table includes the original survey responses data in addition to several columns that describe, summarise or attempt to clean some of the responses. Files currently available relating to the survey data are:
+
+- *`r paste(get.serl.filename("survey_data", survey_version), ".csv", sep = "")`*: the survey data collected during the SERL pilot study - the first phase of recruitment, described in this document
+
+- *`r paste(get.serl.filename("survey_responses", survey_version), ".csv", sep = "")`*: a report on the number of each type of response to each question in the survey, including information about response rates.
+
+
+This document is structured as follows. First we describe the data collection process. The next section details the survey response columns and the meaning of the values they can take, the final section describes the remaining data fields. 
+
+## Data collection
+
+The SERL pilot study recruited the first wave of participants during September and October 2019. 18,000 households in central and southern England and in Wales were sent up to 4 letters inviting them to participate in SERL. All mailings encouraged sign-up online, and some of the mailings provided a paper consent form and survey to sign up by post. The consent form giving access to their smart meter data was mandatory for participation. Completion of the survey was encouraged but not required. 
+
+
+The survey dataset contains `r nrow(survey_clean)` rows (one per participant who responded) and `r ncol(survey_clean)` columns. 
+
+# Survey data fields: question responses
+
+`r tab_caps("presentable2", display = "cite")` describes:
+
+- *Survey field:* the survey question fields in the survey data table whose number corresponds to the question numbers in the survey. In some cases the questions come in multiple parts, in which case they have names such as "A13_01" and "A13_02" or "A1501" and "A1502". Some questions allowed for multiple options to be selected, in which case each option has its own column in the table with possible answers yes (selected) and no (not selected). For example question A3 has ten options, with columns named A301 - A310. There is also a box for participants to write free text. In this case that option is called "A3_Other". 
+
+- *Approximate question:* The corresponding survey question (sometimes with approximate wording for brevity). See the electronic copy of the paper survey for the exact question wording and options.
+
+- *Freetext option:* a binary TRUE/FALSE indicating whether participants could write free text as part of their response to the question. 
+
+- *Possible values:* the pre-defined values that code different response options (where the responses are pre-defined). If free text is available then this may be "NA" (such as for *A3_Other*) or the free text response may not be listed (such as for *A5* which asks for the temperature households set their thermostat to).
+
+- *Value meanings:* the response option in the survey corresponding to each value code.
+
+```{r surveyQuestions, include = FALSE}
+
+questionTable <- survey_questions
+
+rowsQtable <- nrow(questionTable)
+
+# Add code in order to sort into the right order
+questionTable[, VariableCode := Variable]
+
+questionTable[Variable == "L1", VariableCode := "A0"]
+questionTable[Variable == "A1", VariableCode := "A01"]
+questionTable[Variable == "B1", VariableCode := "B01"]
+questionTable[Variable == "C1", VariableCode := "C01"]
+questionTable[Variable == "D1", VariableCode := "D01"]
+
+
+for(v in c("A", "B", "C", "D")) {
+  for(w in 2:9) {
+    questionTable[substr(Variable, 1, 2) == paste(v, w, sep = ""), 
+                  VariableCode := paste(v, "0", substring(Variable, 2), sep = "")]
+  }
+}
+setkey(questionTable, VariableCode)
+
+# Deal with labels written incorrectly
+questionTable[Value == -2, Label := "No answer"]
+questionTable[Value == -1, Label := "Don't know"]
+questionTable[Value == -1 & Variable == "A5", Label := "Don't know/doesn't apply"]
+questionTable[Value == -1 & Variable == "C4", Label := "Don't know/prefer not to say"]
+questionTable[Value == 3 & Label == "Rarely â€“ only if I/we really have to", Label := "Rarely - only if I/we really have to"]
+questionTable[Value == 4 & Label == "Varies - whenever itâ€™s needed", Label := "Varies - whenever it's needed"]
+questionTable[Value == 5 & Label == "Varies â€“ depends on temperature or other reasons", 
+              Label := "Varies - depends on temperature or other reasons"]
+
+
+presentable_questions <- questionTable[!Variable %in% c("Respondent_ID", "Respondent_Serial"),
+                                       list(Variable, i.Label, Value, Label, freeText)]
+colnames(presentable_questions) <- c("Survey field", "Approximate question", 
+                                     "Possible values", "Value meanings","Freetext option")
+
+tab_caps(name = "presentable_questions", caption = "Questions, options and possible responses to all survey questions")
+
+# -------------------
+
+presentable2 <- questionTable[!Variable %in% c("Respondent_ID", "Respondent_Serial"),
+                                       list(Variable, i.Label,freeText, Value, Label)]
+
+presentable2[Label == "Donâ€™t know", Label := "Don't know"]
+presentable2[Label == "Dont know / Doesnt apply", Label := "Don't know / Doesn't apply"]
+presentable2[Label == "a 'No answer'", Label := "No answer"]
+presentable2[Value %in% c("-1.00a", "-1a"), Value := "-1"]
+presentable2[Value %in% c("-2.00a", "-2a"), Value := "-2"]
+presentable2[Value == "-3a", Value := "-3"]
+presentable2[Value %in% c("-9.00a", "-9a"), Value := "-9"]
+
+presentable2 <- survey.flex(presentable2)
+presentable2 <- merge_v(presentable2, j = ~ Variable + i.Label)
+presentable2<- fix_border_issues(presentable2)
+
+presentable2 <- set_header_labels(presentable2, 
+                  Variable = "Survey field", 
+                  i.Label = "Approximate question", 
+                  freeText = "Freetext option",
+                  Value = "Possible values", 
+                  Label = "Value meanings")
+
+tab_caps(name = "presentable2", caption = "Questions, options and possible responses to all survey questions")
+
+
+```
+
+
+`r tab_caps("presentable2")`
+```{r}
+presentable2
+```
+
+
+# Added and derived survey data fields
+
+In addition to the data fields described in the table above, the survey data also contains the following columns. Some of these are participant information columns, some have been computed from the survey response data to aid analysis, and some which attempt to clean the survey data for certain questions. 
+
+
+```{r otherSurveyQuestions, include = FALSE}
+
+survey_flagged <- survey_reordered
+
+otherColNames <- c("PUPRN", 
+                   "Cell", 
+                   "Collection_method", 
+                   "IMD_quintile",
+                   "Region", 
+                   "LSOA", 
+                   colnames(survey_clean[, A3_sum:D3_new]))
+
+
+reduced_survey <- survey_flagged[, .SD, .SDcols = otherColNames]
+
+n.otherCols <- length(otherColNames)
+
+otherCols.tab <- data.table(
+  columnNames = otherColNames,
+  description = rep(NA_character_, n.otherCols),
+  class = lapply(survey_flagged[, .SD, .SDcols = otherColNames], class),
+  example = rep(NA_character_, n.otherCols)
+)
+
+otherCols.tab[columnNames == "PUPRN", 
+              `:=`(description = "Pseudonymised participant identifier",
+                                           example = "1VUXXXF1")]
+
+otherCols.tab[columnNames == "Cell", 
+              `:=`(description = "Pilot study test cell in 1:12",
+                                         example = "7")]
+
+otherCols.tab[columnNames == "Collection_method", 
+              `:=`(description = "1 if survey completed online, 2 if offline",
+                                         example = "1")]
+
+otherCols.tab[columnNames == "IMD_quintile", 
+              `:=`(description = "Index of Multiple Deprivation quintile (1 is most deprived, 5 is least deprived",
+                                         example = "2")]
+
+otherCols.tab[columnNames == "Region", 
+              `:=`(description = "Region in GB",
+                                         example = "East Midlands")]
+
+otherCols.tab[columnNames == "LSOA", 
+              `:=`(description = "Lower Super Output Area in GB",
+                                         example = "E01015916")]
+
+otherCols.tab[columnNames == "A3_sum", 
+              `:=`(description = "Number of response options selected for question A3 (ie the values of A301 + A302 + .. + A310)",
+                                         example = "2")]
+
+otherCols.tab[columnNames == "A3_err", 
+              `:=`(description = "A3 error flag: TRUE if 'No central heating' and some other type of central heating specified. Otherwise FALSE",
+                                         example = "FALSE")]
+
+otherCols.tab[columnNames == "A301_edit", 
+              `:=`(description = "TRUE if A301 was edited, otherwise FALSE",
+                                         example = "FALSE")]
+
+otherCols.tab[columnNames == "A4_sum", 
+              `:=`(description = "Number of response options selected for question A4 (ie the values of A401 + A402 + .. + A406)",
+                                         example = "2")]
+
+otherCols.tab[columnNames == "A4_err", 
+              `:=`(description = "A4 error flag: TRUE if 'none of these' was selected along with another option, otherwise FALSE",
+                                         example = "FALSE")]
+
+otherCols.tab[columnNames == "A405_edit", `:=`(description = "TRUE if A405 was edited, otherwise FALSE",
+                                         example = "FALSE")]
+
+otherCols.tab[columnNames == "A5_edit", `:=`(description = "TRUE if A5 response was very high and therefore assumed to be in Fahrenheit and converted to Celcius, otherwise FASLE.",
+                                         example = "FALSE")]
+
+otherCols.tab[columnNames == "A9_sum", 
+              `:=`(description = "Number of response options selected for question A9 (ie the values of A901 + A902 + .. + A907)",
+                                         example = "4")]
+
+otherCols.tab[columnNames == "A12_Taps_sum", 
+              `:=`(description = "Number of response options selected for question A12 (taps)",
+                                         example = "0")]
+
+otherCols.tab[columnNames == "A12_Shower_sum", 
+              `:=`(description = "Number of response options selected for question A12 (shower)",
+                                         example = "1")]
+
+otherCols.tab[columnNames == "A16_sum", 
+              `:=`(description = "Number of response options selected for question A16 (ie the values of A1601 + A1602 + .. + A1610)",
+                                         example = "2")]
+
+otherCols.tab[columnNames == "A16_edit", 
+              `:=`(description = "",
+                                         example = "TRUE if any A16 responses were edited, otherwise FALSE. If 'not applicable' or 'Not considering any changes' were selected, any other response was removed (except for 'other' which was kept to prevent deleting potentially useful notes), ")]
+
+otherCols.tab[columnNames == "B5_err", 
+              `:=`(description = "B5 error flag: TRUE if B5 < B6 (Number of rooms less than number of bedrooms) or if B5 == 0 (No rooms)",
+                                         example = "FALSE")]
+
+otherCols.tab[columnNames == "B6_err", 
+              `:=`(description = "B6 error flag: TRUE if B5 < B6 (Number of rooms less than number of bedrooms)",
+                                         example = "FALSE")]
+
+otherCols.tab[columnNames == "B10_sum", 
+              `:=`(description = "Number of response options selected for question B106 (ie the values of B1001 + B1002 + .. + B1014)",
+                                         example = "12")]
+
+otherCols.tab[columnNames == "C1_new", 
+              `:=`(description = "C1 after error correction.",
+                                         example = "1")]
+
+otherCols.tab[columnNames == "C2_sum", 
+              `:=`(description = "Number of response options selected for question C2 (ie the values all male and female age categories). Should be equal to C1.",
+                                         example = "4")]
+
+otherCols.tab[columnNames == "C2_sum_diff", 
+              `:=`(description = "C2_sum - C1 (total number of occupants across the age and sex categories minus number of reported occupants",
+                                         example = "0")]
+
+otherCols.tab[columnNames == "C2_error", 
+              `:=`(description = "C2 error flag: TRUE if C2_sum_diff is not equal to 0 (and both questions were answered) and if there isn't an obvious error easily corrected (case by case basis).",
+                                         example = "FALSE")]
+
+otherCols.tab[columnNames == "C2_tot_child", 
+              `:=`(description = "Sum of males and females aged 0-15 years.",
+                                         example = "1")]
+
+otherCols.tab[columnNames == "C2_tot_adult", `:=`(description = "Sum of males and females aged 16+ years.",
+                                         example = "1")]
+
+otherCols.tab[columnNames == "C2_tot_65_plus", 
+              `:=`(description = "Sum of males and females aged 65+ years.",
+                                         example = "1")]
+
+otherCols.tab[columnNames == "All_65_plus", 
+              `:=`(description = "TRUE if all occupants are 65+, FALSE if any under 65, NA if unable to determine",
+                                         example = "TRUE")]
+
+otherCols.tab[columnNames == "C3_sum", 
+              `:=`(description = "Number of response options selected for question C3 (ie the values of C301 + C302 + ... + C307",
+                                         example = "4")]
+
+otherCols.tab[columnNames == "C3_sum_diff", 
+              `:=`(description = "C3_sum - C2_tot_adult (total number of adults across the working categories minus number of reported adults across both sexes.",
+                                         example = "0")]
+
+otherCols.tab[columnNames == "C3_error", 
+              `:=`(description = "C3 error flag: TRUE if C3_sum_diff is not equal to 0 (and both questions were answered) and if there isn't an obvious error easily corrected (case by case basis).",
+                                         example = "FALSE")]
+
+otherCols.tab[columnNames == "C3_edit", 
+              `:=`(description = "TRUE if C3 response was edited in order to correct obvious mistakes, otherwise FALSE",
+                                         example = "FALSE")]
+
+otherCols.tab[columnNames == "None_working", 
+              `:=`(description = "TRUE if no one in the working categories, FALSE if anyone in the working categories, NA if not able to determine",
+                                         example = "FALSE")]
+
+otherCols.tab[columnNames == "C4_error", 
+              `:=`(description = "C4 error flag: TRUE if C4 > C1_new and C1 was answered (i.e. more occupants with a qualification than occupants.",
+                                         example = "FALSE")]
+
+otherCols.tab[columnNames == "D1_new", 
+              `:=`(description = "Backfill of D1 with C1 data since D1 was optional if the participant had already given their data as a single occupant when reporting for the household (of 1). See D1 description for details.",
+                                         example = "5")]
+
+otherCols.tab[columnNames == "D2_new", 
+              `:=`(description = "Backfill of D2 with C2 data since D2 was optional if the participant had already given their data as a single occupant when reporting for the household (of 1). See D2 description for details.",
+                                         example = "2")]
+
+otherCols.tab[columnNames == "D3_new", 
+              `:=`(description = "Backfill of D3 with C2 data since D3 was optional if the participant had already given their data as a single occupant when reporting for the household (of 1). See D3 description for details.",
+                                         example = "1")]
+
+
+
+otherCols.tab <- survey.flex(otherCols.tab)
+#otherCols.tab <- merge_v(otherCols.tab, j = ~ Variable + i.Label)
+#otherCols.tab<- fix_border_issues(otherCols.tab)
+
+otherCols.tab <- set_header_labels(otherCols.tab, 
+                  columnNames = "Field", 
+                  description = "Description", 
+                  class = "Class",
+                  example = "Example value")
+
+
+tab_caps(name = "otherCols.tab", caption = "Data field for those fields that are not survey question responses and those that are calculated from survey question response fields.")
+
+
+
+```
+
+
+`r tab_caps("otherCols.tab")`
+```{r}
+otherCols.tab
+```
+
+
+
+

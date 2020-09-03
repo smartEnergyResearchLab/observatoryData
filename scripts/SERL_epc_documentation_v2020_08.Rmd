@@ -16,31 +16,19 @@ library(knitr)
 library(captioner)
 library(flextable)
 
-source("N:/R/observatoryData/scripts/get.serl.filename.R")
-source("N:/R/observatoryData/scripts/create.info.table.R")
+# Import all filenames, locations, source function files
+source("N:/R/observatoryData/scripts/setup_v2020_08.R")
 
 ```
 
 ```{r defineInputs, include=FALSE}
 
-release_version <- "2020_08"
-release_date <- "2020-08"
-
 load_epc <- TRUE # FALSE if using previously saved .RData
 write_epc <- FALSE # TRUE if we want to save a new csv data file
-
-epc_folder <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/EPC data/"
-epc_loading_filename <- "SERL EPC Data.csv"
-saving_location <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/Observatory2020_08/Processed/"
-epc_saving_filename <- get.serl.filename("epc_data", release_version)
-
-fig_caps <- captioner(prefix = "Figure")
-tab_caps <- captioner(prefix = "Table")
 
 ```
 
 ```{r functions, include = FALSE}
-
 
 get.cases <- function(i, d = epc) {
   v <- colnames(d)[i]
@@ -75,33 +63,25 @@ my.flex <- function(t, autofit = FALSE) {
 ```{r loadData, include=FALSE}
 
 if(load_epc == TRUE) {
-  epc_orig <- fread(paste(epc_folder, epc_loading_filename, sep = ""))
+  epc_orig <- fread(epc_file)
   epc <- copy(epc_orig)
   setnames(epc, old = "puprn", new = "PUPRN")
   save(epc,
-       file = paste(saving_location, epc_saving_filename, ".RData", sep = ""))
+       file = paste(location_processed, epc_output_name, ".RData", sep = ""))
 } else {
-  load(paste(saving_location, epc_saving_filename, ".RData", sep = ""))
+  load(paste(location_processed, epc_output_name, ".RData", sep = ""))
 }
 
 if(write_epc == TRUE) {
   fwrite(epc, 
-         file = paste(saving_location, epc_saving_filename, ".csv", sep = ""))
+         file = paste(location_processed, epc_output_name, ".csv", sep = ""))
 }
-
-```
-
-
-```{r docInfoTable, include = FALSE}
-
-info_tab <- create.info.table()
 
 ```
 
 ```{r}
 info_tab
 ```
-
 
 
 ```{r captions, include = FALSE}
@@ -118,6 +98,7 @@ tab_caps(name = "stats",
 ```
 
 ```{r summary, include = FALSE}
+
 ncol_epc <- ncol(epc)
 nrow_epc <- nrow(epc)
 
@@ -218,8 +199,6 @@ for(i in 1:m) {
   stats[i, SD := round(sd(epc[, get(stats[i, Variable])], na.rm = TRUE), 2)]
 }
 
-
-
 # Tables
 
 ## epc_fields
@@ -273,7 +252,8 @@ stats
 ```{r save, include = FALSE}
 
 save(nrow_epc,
-     file = paste(saving_location, "RData files/epc_stats.RData", sep = "")
+     ncol_epc,
+     file = paste(location_RData, epc_stats_file, sep = "")
 )
 
 ```

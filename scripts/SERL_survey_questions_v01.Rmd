@@ -1,12 +1,9 @@
 ---
-title: "Survey responses"
-author: "Ellen Webborn"
-date: "`r format(Sys.time(), '%d/%m/%Y')`"
+title: "SERL survey data:  \nSummary of responses"
 output:
   word_document: 
-    reference_doc: SERL_word_template2.docx
+    reference_doc: SERL_word_template_portrait1.docx
     toc: yes
-
 ---
 
 
@@ -29,8 +26,6 @@ nParticipants <- nrow(survey_reordered)
 fig.h <- 6
 fig.w <- 10
 fullwidth <- TRUE
-fig_caps <- captioner(prefix = "Figure")
-tab_caps <- captioner(prefix = "Table")
 font.size <- 18
 geom.text.size <- 5
 
@@ -38,6 +33,24 @@ dcp <- 1 # round to 1 decimal place
 ```
 
 ```{r functionDefinitions, include = FALSE}
+
+my.flex <- function(t, autofit = FALSE) {
+  ft <- flextable(t)
+  ft <- theme_booktabs(ft)
+  ft <- theme_zebra(ft, 
+                    odd_header = rgb(84/255, 141/255, 212/255, 1),
+                    even_body = "transparent",
+                    odd_body = rgb(242/255, 242/255, 242/255, 1))
+  ft <- color(ft, color = "white", part = "header")
+  ft <- italic(ft, italic = TRUE, part = "header")
+  ft <- bold(ft, bold = FALSE, part = "header")
+  if(autofit == TRUE) {
+    ft <- autofit(ft)
+  } else{
+    ft <- set_table_properties(ft, layout = "autofit")
+  }
+  return(ft)
+}
 
 rd <- function(x, d = dcp){
   format(round(x, digits = d), nsmall = d)
@@ -420,36 +433,12 @@ setup.sig.test <- function(treatment_type = "Incentive",
   z2
 }
 
-my.flex <- function(t) {
-  ft <- flextable(t)
-  ft <- theme_booktabs(ft)
-  ft <- autofit(ft)
-}
-
-
-```
-
-```{r docInfoTable, include = FALSE}
-info.tab <- data.table(
-  attributes = c("Creation date",
-                 "Version",
-                 "Author",
-                 "Project",
-                 "Organisation"),
-  info = c(
-    "2020-05-18",
-    "01",
-    "Ellen Webborn",
-    "Smart Energy Research Lab (SERL)",
-    "University College London (UCL)")
-)
 
 ```
 
 ```{r}
-kable(info.tab)
+info_tab
 ```
-
 
 ```{r createMainTable, include = FALSE}
 
@@ -1655,7 +1644,7 @@ save(nFullComplete,
 
 ## Introduction 
 
-This document reports on the responses to SERL pilot study survey. The pilot study recruited `r nTot` participants (`r rd(nTot/18000*100)`% overall response rate), of which `r nFullComplete` completed all survey questions (`r rd(nFullComplete/nTot*100)`%), and only 38 did not answer any survey questions (`r rd(38/nTot*100)`%). The questions are presented in the order in which they appear in the survey. One online survey automatically skips questions that are not applicable due to previous answers; the postal survey relies on respondents to follow the instructions to skip where necessary. The data has been cleaned to remove (or replace where obvious) clearly erroneous responses and to make the postal and online survey data as consistent with one another as possible. 
+This document reports on the responses to SERL pilot study survey. The pilot study recruited `r nTot` participants (`r rd(nTot/18000*100)`% overall response rate). Survey data exists for `r nrow_survey` participants (`r rd(nrow_survey/nTot*100)`%), of whom `r nFullComplete` completed the survey in full (`r rd(nFullComplete/nTot*100)`%). Only 38 did not answer any survey questions (`r rd(38/nTot*100)`%). The questions are presented in the order in which they appear in the survey. One online survey automatically skips questions that are not applicable due to previous answers; the postal survey relies on respondents to follow the instructions to skip where necessary. The data has been cleaned to remove (or replace where obvious) clearly erroneous responses and to make the postal and online survey data as consistent with one another as possible. 
 
 
 ## Section A Questions: "About your energy use and heating"
@@ -1674,7 +1663,6 @@ ft.a1 <- my.flex(t.a1)
 
 `r tab_caps("t.a1")`
 ```{r}
-#kable(t.a1)
 ft.a1
 ```
 

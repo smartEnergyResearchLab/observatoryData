@@ -20,10 +20,13 @@ library(ggplot2)
 library(cowplot)
 library(scales)
 
-source("scripts/get.serl.filename.R")
-source("scripts/create.info.table.R")
+# Import all filenames, locations, source function files
+source("N:/R/observatoryData/scripts/setup_v2020_08.R")
 
 # Set figure defaults
+fig.h <- 5.5
+fig.w <- 10
+fullwidth <- TRUE
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, fig.width = fig.w, fig.height = fig.h, fig.fullwidth = fullwidth, dpi = 300)
 
 ```
@@ -32,19 +35,7 @@ knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, fig.width 
 
 load_table_data <- FALSE # TRUE if importing data already created by this file
 
-release_version <- "2020_08"
-release_date <- "2020-08"
-
-collection_end_date <- ymd("2020-07-31")
-
-location_processed <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/Observatory2020_08/Processed/"
-
-min_n_to_determine_unit_error <- 30
-
 # Define plotting/reporting variables for the markdown output
-fig.h <- 5.5
-fig.w <- 10
-fullwidth <- TRUE
 fig_caps <- captioner(prefix = "Figure")
 tab_caps <- captioner(prefix = "Table")
 font.size <- 12
@@ -55,30 +46,16 @@ dcp <- 2 # number of decimal places for rounding
 ```
 
 ```{r loadData, include = FALSE}
+
 if(load_table_data == FALSE) {
-  load(paste(location_processed, 
-             get.serl.filename("daily_data", release_version),
-             ".RData", 
-             sep = "")
-       )
-  load(paste(location_processed, 
-             get.serl.filename("hh_data", release_version),
-             ".RData", 
-             sep = "")
-       )
-  load(paste(location_processed, 
-             get.serl.filename("rt_data", release_version),
-             ".RData", 
-             sep = "")
-       )
-  load(paste(location_processed, 
-             get.serl.filename("ps_data", release_version),
-             ".RData", 
-             sep = "")
-       )
+  load(daily_processed_file)
+  load(hh_processed_file)
+  load(rt_processed_file)
+  load(ps_processed_file)
 } else {
-  load(paste(location_processed, "/RData files/DQ_input.RData", sep = ""))
+  load(dq_input_file)
 }
+
 ```
 
 ```{r functions, include = FALSE}
@@ -158,11 +135,6 @@ summarise.by.month <- function(dt = hh,
 
 ```
 
-
-```{r docInfoTable, include = FALSE}
-info_tab <- create.info.table()
-```
-
 ```{r}
 info_tab
 ```
@@ -208,12 +180,10 @@ if(load_table_data == FALSE) {
   ncol_pp <- ncol(participant_summary)
 
   all_puprn <- unique(rt_summary$PUPRN)
-#n_no_elec <- length(all_puprn[!(all_puprn %in% elec_meters$PUPRN)]) # 0
 n_no_elec <-
-  length(all_puprn[!(all_puprn %in% rt_summary[deviceType == "ESME", PUPRN])]) # 0
-#n_no_gas <- length(all_puprn[!(all_puprn %in% gas_meters$PUPRN)])
+  length(all_puprn[!(all_puprn %in% rt_summary[deviceType == "ESME", PUPRN])]) 
 n_no_gas <-
-  length(all_puprn[!(all_puprn %in% rt_summary[deviceType == "GPF", PUPRN])]) # 431
+  length(all_puprn[!(all_puprn %in% rt_summary[deviceType == "GPF", PUPRN])]) 
 n_pp <- length(all_puprn)
 }
 
@@ -905,6 +875,13 @@ if(load_table_data == FALSE) {
     last_read_date_d,
     n_d_p,
     nrow_d,
+    ncol_d,
+    nrow_hh,
+    ncol_hh,
+    nrow_reads,
+    ncol_reads,
+    nrow_pp,
+    ncol_pp,
     t.avail.summary,
     t.hh.elec.flag,
     t.hh.reactive.flag,
@@ -925,7 +902,7 @@ if(load_table_data == FALSE) {
     n_id,
     summaries,
     monthly_plots,
-    file = paste(location_processed, "/RData files/DQ_input.RData", sep = "")
+    file = dq_input_file
   )
 }
 

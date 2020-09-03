@@ -3,52 +3,25 @@
 #  data release. 
 
 # Code developed by Ellen Webborn, UCL using R version 3.6.0 (2019-09-01)
+# Most recent edits made 2020-09-03
+
+# For the latest versions of all code and documentation please visit the SERL
+#  GitHub page https://github.com/smartEnergyResearchLab
 
 
 # Setup -------------------------------------------------------------------
-startTime <- proc.time()
 
 library(data.table)
 library(lubridate)
 library(stringr)
 
-source("scripts/get.serl.filename.R")
-
+# Import all filenames, locations, source function files
+source("N:/R/observatoryData/scripts/setup_v2020_08.R")
 
 
 # Define Input Variables --------------------------------------------------
-save_data <- FALSE
-remove_orig <- TRUE
 
-release_version <- "2020_08"
-survey_version <- "01"
-collection_end_date <- ymd("2020-07-31")
-
-main_folder <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/Observatory2020_08/"
-
-
-## Input data
-
-### Half-hourly
-raw_hh <- "Half-Hourly Readings Aug2018-Jul2020.csv"
-raw_daily <- "Daily Readings Aug2018-Jul2020.csv"
-
-### Auxilliary files
-theoretical_dates_file <- paste(main_folder, "/Original/actualStart_20_08_10.csv", sep = "")
-survey_file <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Pilot_survey/pilot_survey_data_1675.RData"
-participant_details_file <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/SERL Participants Data 2020-07-09 EW Edit.csv"
-EPC_file <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/SERL EPC Data.csv"
-inventory_file <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Inventory/Monthly Inventory Data 2020-08-03.csv"
-
-### Filenames and locations
-location_processed <- paste(main_folder, "Processed/")
-location_orig <- paste(main_folder, "Original/", sep = "")
-
-daily_saving_name <- get.serl.filename("daily_data", release_version)
-hh_saving_name <- get.serl.filename("hh_data", release_version)
-rt_saving_name <- get.serl.filename("rt_data", release_version)
-pp_summary_saving_name <- get.serl.filename("ps_data", release_version)
-
+save_data <- FALSE # TRUE will overwrite any existing output csv & RData files
 
 
 # Error codes -------------------------------------------------------------
@@ -124,8 +97,8 @@ error_codes_daily <- data.table(read = c("Elec_act_imp_d_Wh",
 
 # FunctionDefinitions ---------------------------------------------------------------
 
-attach.EPC.basic.info <- function(participant_summary, EPC_file) {
-  EPC <- fread(EPC_file)
+attach.EPC.basic.info <- function(participant_summary, epc_file) {
+  EPC <- fread(epc_file)
   setnames(EPC, "puprn", "PUPRN")
   setkey(EPC, PUPRN)
   participant_summary <- EPC[, .(PUPRN, current_energy_rating)][participant_summary]
@@ -318,7 +291,7 @@ correct.theoretical.start <- function(rt_summary) {
   return(rt_summary)
 }
 
-create.participant.summary <- function(rt_summary, survey_file, participant_details_file, EPC_file) {
+create.participant.summary <- function(rt_summary, survey_file, participant_details_file, epc_file) {
   tmp_poss_reads <- copy(rt_summary[, .(PUPRN,
                                         deviceType,
                                         readType,
@@ -359,7 +332,7 @@ create.participant.summary <- function(rt_summary, survey_file, participant_deta
   
   participant_summary <- attach.survey.data(participant_summary, survey_file)
   participant_summary <- attach.participant.info(participant_summary, participant_details_file)
-  participant_summary <- attach.EPC.basic.info(participant_summary, EPC_file)
+  participant_summary <- attach.EPC.basic.info(participant_summary, epc_file)
   
   setnames(participant_summary, 
            old = c("Region",
@@ -944,6 +917,8 @@ validate.daily.read.time <- function(daily) {
 
 # Import and preprocess data ----------------------------------------------
 
+collection_end_date <- ymd(most_recent_smart_meter_date)
+
 inventory <- fread(inventory_file)
 setnames(inventory, old = "puprn", new = "PUPRN")
 
@@ -956,12 +931,12 @@ readDates <-
                                    collection_end_date)
 
 ptm <- proc.time()
-hh_orig <- import.and.rbind(raw_hh, location_orig)
+hh_orig <- import.and.rbind(hh_filename, location_orig)
 proc.time() - ptm # 91 seconds elapsed
 
 
 ptm <- proc.time()
-daily_orig <- import.and.rbind(raw_daily, location_orig)
+daily_orig <- import.and.rbind(daily_filename, location_orig)
 proc.time() - ptm # 4 seconds elapsed
 
 # deal with integer-64 in hh data (replace 64-bit equivalent of 16777215 with 32-bit version)
@@ -972,11 +947,10 @@ hh[, elec_active_import_profile_hh_wh := as.integer(elec_active_import_profile_h
 
 daily <- copy(daily_orig)
 
-if(remove_orig == TRUE) {
-  rm(daily_orig)
-  rm(hh_orig)
-  gc()
-}
+# Remove originals to save space (skip to allow comparison)
+rm(daily_orig)
+rm(hh_orig)
+gc()
 
 
 # Main processing ---------------------------------------------------------
@@ -1022,6 +996,10 @@ daily <- reorder.sm.cols(daily, "daily")
 
 # save
 if(save_data == TRUE) {
+  
+  daily_saving_name <- get.serl.filename("daily_data", release_version)
+  hh_saving_name <- get.serl.filename("hh_data", release_version)
+  
   ptm <- proc.time()
   fwrite(hh, 
          file = paste(location_processed, hh_saving_name, ".csv", sep =  ""))
@@ -1071,6 +1049,9 @@ rt_summary <- reorder.rt_summary.cols(rt_summary)
 
 # save
 if(save_data == TRUE) {
+  
+  rt_saving_name <- get.serl.filename("rt_data", release_version)
+  
   ptm <- proc.time()
   fwrite(rt_summary, 
          file = paste(location_processed, rt_saving_name, ".csv", sep =  ""))
@@ -1082,8 +1063,6 @@ if(save_data == TRUE) {
   proc.time() - ptm # 0.2 seconds elapsed
 }
 
-proc.time() - startTime
-
 
 # Participant-level summary -----------------------------------------------
 
@@ -1091,11 +1070,14 @@ ptm <- proc.time()
 participant_summary <- create.participant.summary(rt_summary, 
                                                   survey_file, 
                                                   participant_details_file, 
-                                                  EPC_file)
+                                                  epc_file)
 proc.time() - ptm # 1.2 seconds elapsed
 
 # save
 if(save_data == TRUE) {
+  
+  pp_summary_saving_name <- get.serl.filename("ps_data", release_version)
+  
   ptm <- proc.time()
   fwrite(participant_summary, 
          file = paste(location_processed, pp_summary_saving_name, ".csv", sep =  ""))
@@ -1106,4 +1088,5 @@ if(save_data == TRUE) {
        file = paste(location_processed, pp_summary_saving_name, ".RData", sep =  ""))
   proc.time() - ptm # 0.08 seconds elapsed
 }
-proc.time() - startTime
+
+
