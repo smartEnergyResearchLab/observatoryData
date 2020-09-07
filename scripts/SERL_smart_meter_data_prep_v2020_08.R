@@ -3,7 +3,7 @@
 #  data release. 
 
 # Code developed by Ellen Webborn, UCL using R version 3.6.0 (2019-09-01)
-# Most recent edits made 2020-09-03
+# Most recent edits made 2020-09-07
 
 # For the latest versions of all code and documentation please visit the SERL
 #  GitHub page https://github.com/smartEnergyResearchLab
@@ -14,6 +14,8 @@
 library(data.table)
 library(lubridate)
 library(stringr)
+
+options(datatable.fread.input.cmd.message=FALSE)
 
 # Import all filenames, locations, source function files
 source("N:/R/observatoryData/scripts/setup_v2020_08.R")
@@ -439,7 +441,7 @@ determine.theoretical.read.dates <- function(theoretical_dates_file,
                                              participant_details,
                                              collection_end_date) {
   theoretical_dates <- fread(theoretical_dates_file)
-  setnames(theoretical_dates, "puprn", "PUPRN")
+  setnames(theoretical_dates, "puprn", "PUPRN", skip_absent = TRUE)
   theoretical_dates <- handle.duplicate.listings(theoretical_dates)
   decommission_dates <- get.decommission.dates(inventory)
   consent_end_dates <- participant_details[, .(PUPRN, WoC_CoT_effective_date)]
@@ -1012,12 +1014,12 @@ if(save_data == TRUE) {
   
   ptm <- proc.time()
   save(hh, 
-       file = paste(location_processed, hh_saving_name, ".RData", sep = ""))
+       file = paste(location_RData, hh_saving_name, ".RData", sep = ""))
   proc.time() - ptm # 474.3 seconds elapsed
   
   ptm <- proc.time()
   save(daily, 
-       file = paste(location_processed, daily_saving_name, ".RData", sep = ""))
+       file = paste(location_RData, daily_saving_name, ".RData", sep = ""))
   proc.time() - ptm # 9.82 seconds elapsed
 }
 
@@ -1059,7 +1061,7 @@ if(save_data == TRUE) {
   
   ptm <- proc.time()
   save(rt_summary, 
-       file = paste(location_processed, rt_saving_name, ".RData", sep = ""))
+       file = paste(location_RData, rt_saving_name, ".RData", sep = ""))
   proc.time() - ptm # 0.2 seconds elapsed
 }
 
@@ -1085,7 +1087,7 @@ if(save_data == TRUE) {
   
   ptm <- proc.time()
   save(participant_summary, 
-       file = paste(location_processed, pp_summary_saving_name, ".RData", sep =  ""))
+       file = paste(location_RData, pp_summary_saving_name, ".RData", sep =  ""))
   proc.time() - ptm # 0.08 seconds elapsed
 }
 

@@ -59,17 +59,17 @@ tab_caps <- captioner::captioner(prefix = "Table")
 info_tab <- create.info.table()
 
 ## Define locations
-location_orig <- paste(main_folder, original_data_ext, sep = "")
+location_orig <- paste(main_folder,observatory_release_ext, original_data_ext, sep = "")
 location_processed <- paste(main_folder, observatory_release_ext, processed_data_ext, sep = "")
 location_RData <- paste(main_folder, observatory_release_ext, processed_RData_ext, sep = "")
 
 ## Data file paths
-epc_file <- paste(epc_location, epc_filename)
+epc_file <- paste(epc_location, epc_filename, sep = "")
 inventory_file <- paste(inventory_location, inventory_filename, sep = "")
 onboard_file <- paste(onboarding_location, onboarding_filename, sep = "")
 participant_details_file <- paste(participant_details_location, participant_details_filename, sep = "")
 survey_file <- paste(survey_location, survey_filename, sep = "")
-theoretical_dates_file <- paste(main_folder, original_data_ext, theoret_dates_filename, sep = "")
+theoretical_dates_file <- paste(location_orig, theoret_dates_filename, sep = "")
 
 ## Output file paths
 climate_output <- get.serl.filename("climate_data", release_version)

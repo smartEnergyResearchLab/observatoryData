@@ -35,14 +35,14 @@ create.info.table <- function(vers = release_date,
              org)
   )
   
-  itf <- flextable(it)
+  itf <- flextable::flextable(it)
   
   for (i in 1:ncol(it)) {
-    itf <- width(itf, j = i, width = col_widths[i])
+    itf <- flextable::width(itf, j = i, width = col_widths[i])
   }
   
-  itf <- delete_part(x = itf,
+  itf <- flextable::delete_part(x = itf,
                      part = "header")
   
-  itf <- border_remove(itf)
+  itf <- flextable::border_remove(itf)
 }
