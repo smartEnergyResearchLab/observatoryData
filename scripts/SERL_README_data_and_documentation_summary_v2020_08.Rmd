@@ -142,7 +142,7 @@ p_count
 
 # 2020-08 SERL Observatory dataset
 
-This document accompanies the 2020-08 release of the SERL Observatory dataset. This is the first Observatory dataset release and is available in a secure virtual environment to UK-based accredited researchers working on approved projects (Data Access section for more details).
+This document accompanies the 2020-08 release of the SERL Observatory dataset. This is the first Observatory dataset release and is available in a secure virtual environment to UK-based accredited researchers working on approved projects (see Data Access section for more details).
 
 Smart meter data collection start dates vary by participant; the earliest start date is in August 2018. This data release contains all data available up until 31st July 2020. Future data releases will include more recent data and data from participants recruited in the second and third waves of participant recruitment. 
 
@@ -198,7 +198,7 @@ The R code used to process the raw half-hourly and daily datasets (creating the 
 
 ## Survey data
 
-When they sign up participants are encouraged to complete a survey about their household and dwelling online or on a paper form. The online and offline versions contain the same questions and response options, and the data are provided together, with a variable indicating the response mode. The online survey has the advantage of automatic question routing and basic answer checking (e.g. flagging up the wrong input type). 
+When participants sign up they are encouraged to complete a survey about their household and dwelling online or on a paper form. The online and offline versions contain the same questions and response options, and the data are provided together, with a variable indicating the response mode. The online survey has the advantage of automatic question routing and basic answer checking (e.g. flagging up the wrong input type). 
 
 Survey data exists for `r nrow_survey` participants, of whom `r nFullComplete` completed the survey in full. 
 
@@ -289,7 +289,7 @@ Summary of steps and rough timelines:
 2. University ethics approval: this varies by institution but allow at least _3-4 weeks_
 3. Project application (UKDS triage and SERL Data Governance Board review): _4-6 weeks_
 
-Therefore, if starting from scratch, it is recommended that researchers allow at least 3 months for completion of the above processes before access to the data is required.
+Therefore, if starting from scratch, it is recommended that researchers allow _at least 3 months_ for completion of the above processes before access to the data is required.
 
 Full details are available here: [Accessing SERL Observatory data – information for researchers (PDF)](https://serl.ac.uk/wp-content/uploads/2020/08/Accessing-SERL-Observatory-data-info-for-researchers-v04.pdf)
 
