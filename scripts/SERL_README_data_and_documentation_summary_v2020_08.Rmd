@@ -142,16 +142,18 @@ p_count
 
 # 2020-08 SERL Observatory dataset
 
-This document accompanies the 2020-08 release of the SERL Observatory dataset. This is the first Observatory dataset release and is available in a secure virtual environment to UK-based accredited researchers working on approved projects (Data Access section for more details). Smart meter data collection start dates vary by participant; the earliest start date is in August 2018. This data release contains all data available up until 31st July 2020. Future data releases will include more recent data and data from participants recruited in the second and third waves of participant recruitment. 
+This document accompanies the 2020-08 release of the SERL Observatory dataset. This is the first Observatory dataset release and is available in a secure virtual environment to UK-based accredited researchers working on approved projects (Data Access section for more details).
 
-The datasets can be linked at the household level using the "PUPRN" pseudo-anonymous identifier included in each dataset. The climate data can be linked through the "grid_cell" provided with the participant summary (smart meter) dataset. 
+Smart meter data collection start dates vary by participant; the earliest start date is in August 2018. This data release contains all data available up until 31st July 2020. Future data releases will include more recent data and data from participants recruited in the second and third waves of participant recruitment. 
+
+The datasets can be linked at the household level using the pseudo-anonymous "PUPRN" (pseudo-UPRN (Unique Property Reference Number)) identifier included in each dataset. The climate data can be linked through the "grid_cell" provided with the participant summary (smart meter) dataset. 
 
 
 ## Smart meter data
 
-In order to participate a household must have a DCC-enrolled electricity smart meter (SMETS2 or enrolled SMETS1). In GB smart meters collect electricity and gas (where available) data at 30-minute resolution. If a household has embedded generation such as solar PV, the electricity readings show the net demand for each half-hour (always non-negative) and separate readings show net export (always non-negative). Reactive power data is also available. In addition to the half-hourly data, daily reads are also provided, which can be used for data quality checking, or enhanced by the half-hourly reads if daily reads are missing. 
+In order to participate a household must have a DCC-enrolled electricity smart meter (SMETS2 or DCC-enrolled SMETS1). In GB smart meters collect electricity and gas (where available) data at 30-minute resolution. If a household has embedded generation such as solar PV, the electricity readings show the net demand for each half-hour (always non-negative) and separate readings show net export (always non-negative). Reactive power data is also available. In addition to the half-hourly data, daily reads are also provided, which can be used for data quality checking, or enhanced by the half-hourly reads if daily reads are missing. 
 
-Currently `r n_d_p` participants have daily smart meter reads in the datset and `r n_hh_p` have half-hourly reads in the dataset. `r n_no_gas` participants do not have a gas meter (that we are able to access). 
+As of `r most_recent_smart_meter_date` `r n_d_p` participants have daily smart meter reads in the datset and `r n_hh_p` have half-hourly reads in the dataset. `r n_no_gas` participants do not have a gas meter (that we are able to access). 
 
 ### Data files
 
@@ -160,22 +162,22 @@ There are four data files relating to smart meter data:
 * _`r paste(get.serl.filename("daily_data", release_version) , ".csv", sep = "")`_ 
    + daily electricity and gas readings with some additional derived columns
    + `r nrow_d` records
-   + r ncol_d fields
+   + `r ncol_d` fields
 
 * _`r paste(get.serl.filename("hh_data", release_version) , ".csv", sep = "")`_ 
    + half-hourly electricity and gas readings with some additional derived columns (note that this dataset also includes reactive readings and export readings where available)
-   + r nrow_hh records
-   + r ncol_hh fields   
+   + `r nrow_hh` records
+   + `r ncol_hh` fields   
 
 * _`r paste(get.serl.filename("rt_data", release_version) , ".csv", sep = "")`_ 
    + data quality summary for each read type for each participant (such as number of errors found by type) and basic read statistics (such as mean and maximum)
-   + r nrow_reads records
-   + r ncol_reads fields
+   + `r nrow_reads` records
+   + `r ncol_reads` fields
    
 * _`r paste(get.serl.filename("ps_data", release_version) , ".csv", sep = "")`_ 
    + data quality summary for each participant (less detail than the read-type summary data, but also including basic participant information such as region and number of questions answered on the survey)
-   + r nrow_pp records
-   + r ncol_pp fields   
+   + `r nrow_pp` records
+   + `r ncol_pp` fields   
    
 
 ### Documentation

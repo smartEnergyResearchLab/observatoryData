@@ -36,8 +36,6 @@ knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, fig.width 
 load_table_data <- FALSE # TRUE if importing data already created by this file
 
 # Define plotting/reporting variables for the markdown output
-fig_caps <- captioner(prefix = "Figure")
-tab_caps <- captioner(prefix = "Table")
 font.size <- 12
 title.size <- 14
 geom.text.size <- 5
