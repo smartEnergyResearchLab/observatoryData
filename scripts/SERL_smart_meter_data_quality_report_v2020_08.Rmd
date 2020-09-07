@@ -33,7 +33,7 @@ knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, fig.width 
 
 ```{r defineInputs, include = FALSE}
 
-load_table_data <- FALSE # TRUE if importing data already created by this file
+load_table_data <- TRUE # TRUE if importing data already created by this file
 
 # Define plotting/reporting variables for the markdown output
 font.size <- 12
@@ -192,9 +192,9 @@ n_pp <- length(all_puprn)
 
 # Data availability
 
-The following tables give some key statistics for the distribution of data quality across participants, and some basic statistics about the valid readings. For more information about error definitions, see the Errors section below or the *SERL_smart_meter_data_documentation_v2020_08.pdf* accompanying document. The data are presented as percentages on the next page. The abbreviation ‘HH’ stands for ‘half-hourly’.
+The following tables give some key statistics for the distribution of data quality across participants, and some basic statistics about the valid readings. For more information about error definitions, see the Errors section below or the *`r paste(get.serl.filename("sm_doc", release_version), ".pdf", sep = "")`* accompanying document. The data are presented as percentages on the next page. The abbreviation ‘HH’ stands for ‘half-hourly’.
 
-All of the import read types have some participants for which there were no valid readings available, however over 900 participants have at least 90% of gas and electricity active import reads available.
+All of the import read types have some participants for which there were no valid readings available, however over 900 participants have at least 95% of gas and electricity active import reads available. A handful of participants are recorded as “with a device” for half-hourly data but not for daily. This is because these participants withdrew consent after we started collecting half-hourly data, but before daily reading collection began.
 
 ```{r availabilityStats, include = FALSE}
 
@@ -278,7 +278,7 @@ t.avail.summary.P <- my.flex(t.avail.summary[, c(1, 9:13, 15, 14)])
 t.avail.summary.N
 ```
 
-Table 2 shows the same data presented as a percentage. The first row of data (‘With a device’) shows the percent of participants we expect to have each type of read. Approximately 74% of households have a gas meter registered with the DCC (i.e. a SMETS2 gas meter or an upgraded SMETS1 meter). The percentages in the rows that follow are percentage of those With a device, e.g. 82.4% of households with a smart meter that we could collect data from have at least 90% of their readings available and valid. 
+Table 2 shows the same data presented as a percentage. The first row of data (‘With a device’) shows the percent of participants we expect to have each type of read. Approximately 75% of households have a gas meter registered with the DCC (i.e. a SMETS2 gas meter or an upgraded SMETS1 meter). The percentages in the rows that follow are percentage of those with a device, e.g. 79.6% of households with a smart meter that we could collect data from have at least 90% of their half-hourly electricity active import readings available and valid.
 
 `r tab_caps("t.avail.summary.P")`
 ```{r}
@@ -399,11 +399,11 @@ hh_ex_over_time
 
 # Errors
 
-More details about the error flags/codes can be found in the *SERL_smart_meter_data_documentation_v2020_08.pdf* accompanying document.
+More details about the error flags/codes can be found in the *`r paste(get.serl.filename("sm_doc", release_version), ".pdf", sep = "")`* accompanying document.
 
 ## Half-hourly data
 
-The half-hourly data runs from `r first_read_date_hh` to `r last_read_date_hh` and `r n_hh_p` participants have half-hourly reads. For each half-hourly read, for each participant, the following tables show the number of errors and valid reads in the half-hourly electricity and gas datasets. Abbreviations: ‘act’ (active), ‘react (reactive) and ‘elec’ (electricity).
+The half-hourly data runs from `r first_read_date_hh` to `r last_read_date_hh` and `r n_hh_p` participants have half-hourly reads. For each half-hourly read, for each participant, the following tables show the number of errors and valid reads in the half-hourly electricity and gas datasets. Abbreviations: ‘act’ (active), ‘react' (reactive) and ‘elec’ (electricity).
 
 Note that all `r n_pp` participants have an electricity meter and `r n_no_gas` participants don’t have a gas meter (`r round(n_no_gas/n_pp*100, 1)`%). The main issue for half-hourly electricity active import and export reads is missing data, which affects import reads much more than export reads (as a percentage of available reads for each). 
 
@@ -567,7 +567,7 @@ The electricity reactive import and export reads only have issues with missing d
 t.hh.reactive.flag
 ```
 
-The half-hourly gas reads have greater availability than the half-hourly electricity active import reads, but suffer from a few incredibly high readings. The Max read error flag (-1) is when the read is the largest number storable/transmittable (all 1s in binary). For more details see the aforementioned smart meter data documentation.
+The half-hourly gas reads have greater availability than the half-hourly electricity active import reads, but suffer from a few incredibly high readings. The 'max read' error flag (-1) is when the read is the largest number storable/transmittable (all 1s in binary). For more details see the aforementioned smart meter data documentation.
 
 `r tab_caps("t.hh.gas.flag")`
 ```{r}
@@ -821,7 +821,7 @@ fig_caps(name = "f.d.gas.imp.reduced",
 
 
 `r fig_caps("f.hh.elec.act.imp.reduced")`
-```{r}
+```{r fig.width = fig.w * 0.6, fig.height = fig.h * 0.8}
 f.hh.elec.act.imp.reduced
 ```
 
