@@ -1,5 +1,5 @@
 ---
-title: "EPC data:  \ntechnical documentation"
+title: "EPC data:  \nTechnical documentation"
 output: 
   word_document:
     reference_doc: SERL_word_template_portrait1.docx
@@ -15,6 +15,7 @@ library(lubridate)
 library(knitr)
 library(captioner)
 library(flextable)
+library(officer)
 
 # Import all filenames, locations, source function files
 source("N:/R/observatoryData/scripts/setup_v2020_08.R")
@@ -58,6 +59,24 @@ my.flex <- function(t, autofit = FALSE) {
   return(ft)
 }
 
+survey.flex <- function(t, autofit = TRUE) {
+  ft <- flextable(t)
+  ft <- theme_booktabs(ft)
+  ft <- border(ft, border.top = fp_border(color = "gray") )
+  ft <- bg(ft, bg = rgb(84/255, 141/255, 212/255, 1), 
+            part = "header")
+  ft <- color(ft, color = "white", part = "header")
+  ft <- italic(ft, italic = TRUE, part = "header")
+  ft <- bold(ft, bold = FALSE, part = "header")
+  # if(autofit == TRUE) {
+  #   ft <- autofit(ft)
+  # } else{
+  #   ft <- set_table_properties(ft, width = 1, layout = "autofit")
+  # }
+  ft <- set_table_properties(ft, width = 1, layout = "autofit")
+  return(ft)
+}
+
 ```
 
 ```{r loadData, include=FALSE}
@@ -67,9 +86,11 @@ if(load_epc == TRUE) {
   epc <- copy(epc_orig)
   setnames(epc, old = "puprn", new = "PUPRN")
   save(epc,
-       file = paste(location_processed, epc_output_name, ".RData", sep = ""))
+       file = paste(location_processed, 
+                    epc_output_name, ".RData", sep = ""))
 } else {
-  load(paste(location_processed, epc_output_name, ".RData", sep = ""))
+  load(paste(location_processed, 
+             epc_output_name, ".RData", sep = ""))
 }
 
 if(write_epc == TRUE) {
@@ -204,22 +225,24 @@ for(i in 1:m) {
 ## epc_fields
 epc_fields[, position := NULL]
 colnames(epc_fields) <- c("variable", "n unique values", "class", "example")
-epc_fields <- my.flex(epc_fields)
+epc_fields <- survey.flex(epc_fields)
 
 
 ## summary_short
 colnames(summary_short) <- c("variable", "value", "number", "percent")
-summary_short <- my.flex(summary_short)
+summary_short <- survey.flex(summary_short)
+summary_short <- merge_v(summary_short, j = ~ variable)
+summary_short <- fix_border_issues(summary_short)
 
 ## stats
 colnames(stats) <- c("variable", "n", "min", "max", "mean", "standard deviation")
-stats <- my.flex(stats)
+stats <- survey.flex(stats)
 
 ```
 
 # Introduction
 
-This document describes the England and Wales Energy Performance Certificate (EPC) data collected for SERL participants, stored in the file *"SERL_EPC_data_v2020_07.csv"*. The data contains `r ncol_epc` columns and `r nrow_epc` rows (one row per participant with available EPC data). This document lists the EPC variables available along with basic information about the values for each variable such as number of unique values and statistics for numerical variables. A guide to the variables is available [here](https://epc.opendatacommunities.org/docs/guidance#glossary_domestic).
+This document describes the England and Wales Energy Performance Certificate (EPC) data collected for SERL participants, stored in the file *`r paste(get.serl.filename("epc_data", release_version), ".csv", sep = "")`*. The data contains `r ncol_epc` columns and `r nrow_epc` rows (one row per participant with available EPC data). This document lists the EPC variables available along with basic information about the values for each variable such as number of unique values and statistics for numerical variables. A guide to the variables is available [here](https://epc.opendatacommunities.org/docs/guidance#glossary_domestic).
 
 A few variables have been added to the EPC data since the data were collected (largely in October 2019, a few individual households had data retrieved later), and these will be made available in future SERL data releases. Data were collected with the Domestic Energy Performance Certificates API using the house number and postcode (details [here](https://epc.opendatacommunities.org/docs/api/domestic)).  
 
@@ -253,7 +276,7 @@ stats
 
 save(nrow_epc,
      ncol_epc,
-     file = paste(location_RData, epc_stats_file, sep = "")
+     file = paste(epc_stats_file, sep = "")
 )
 
 ```

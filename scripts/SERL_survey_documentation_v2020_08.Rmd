@@ -4,9 +4,6 @@ output:
   word_document:
     reference_doc: SERL_word_template_landscape1.docx
     toc: yes
-  html_document:
-    df_print: paged
-    toc: yes
 ---
 
 ```{r setup, include=FALSE}

@@ -221,7 +221,9 @@ Two documents accompany the survey data:
 
 ### Code
 
-The R code used to process the raw survey data will be made available on the [SERL GitHub](https://github.com/smartEnergyResearchLab) site.
+The R code used to process the cleaned survey data is available with this data release. All code and documentation is (or will shortly be) available on the [SERL GitHub site](https://github.com/smartEnergyResearchLab) which will contain the most up-to-date versions of all non-disclosive files, including the survey data cleaning file. The code file is
+
+* _`r paste(get.serl.filename("survey_code", survey_version), ".R", sep = "")`_
 
 
 ## Energy Performance Certificate (EPC) data

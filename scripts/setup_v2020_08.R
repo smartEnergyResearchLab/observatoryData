@@ -72,7 +72,7 @@ survey_file <- paste(survey_location, survey_filename, sep = "")
 theoretical_dates_file <- paste(location_orig, theoret_dates_filename, sep = "")
 
 ## Output file paths
-climate_output <- get.serl.filename("climate_data", release_version)
+climate_output_name <- get.serl.filename("climate_data", release_version)
 epc_output_name <- get.serl.filename("epc_data", release_version)
 
 ## RData files

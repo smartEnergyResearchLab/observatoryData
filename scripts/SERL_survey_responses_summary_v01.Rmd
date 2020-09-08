@@ -1,10 +1,8 @@
 ---
-title: "Survey responses"
-author: "Ellen Webborn"
-date: "`r format(Sys.time(), '%d/%m/%Y')`"
+title: "Survey data:  \nSummary of responses"
 output:
   word_document: 
-    reference_doc: SERL_word_template2.docx
+    reference_doc: SERL_word_template_portrait1.docx
     toc: yes
 
 ---
@@ -29,12 +27,12 @@ nParticipants <- nrow(survey_reordered)
 fig.h <- 6
 fig.w <- 10
 fullwidth <- TRUE
-fig_caps <- captioner(prefix = "Figure")
-tab_caps <- captioner(prefix = "Table")
 font.size <- 18
 geom.text.size <- 5
 
 dcp <- 1 # round to 1 decimal place
+
+info_tab <- create.info.table(vers = survey_version)
 ```
 
 ```{r functionDefinitions, include = FALSE}
@@ -429,25 +427,9 @@ my.flex <- function(t) {
 
 ```
 
-```{r docInfoTable, include = FALSE}
-info.tab <- data.table(
-  attributes = c("Creation date",
-                 "Version",
-                 "Author",
-                 "Project",
-                 "Organisation"),
-  info = c(
-    "2020-05-18",
-    "01",
-    "Ellen Webborn",
-    "Smart Energy Research Lab (SERL)",
-    "University College London (UCL)")
-)
-
-```
 
 ```{r}
-kable(info.tab)
+info_tab
 ```
 
 

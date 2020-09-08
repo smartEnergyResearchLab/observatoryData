@@ -1,5 +1,5 @@
 ---
-title: 'Climate data: technical documentation'
+title: 'Climate data: Technical documentation'
 output: 
   word_document:
     reference_doc: SERL_word_template_portrait1.docx
@@ -14,6 +14,7 @@ library(data.table)
 library(lubridate)
 library(knitr)
 library(captioner)
+library(flextable)
 
 # Import all filenames, locations, source function files
 source("N:/R/observatoryData/scripts/setup_v2020_08.R")
@@ -22,10 +23,33 @@ source("N:/R/observatoryData/scripts/setup_v2020_08.R")
 
 ```{r defineInputs, include = FALSE}
 
-load_climate <- TRUE
+load_climate <- FALSE
 write_climate <- FALSE
 
 ```
+
+
+```{r functions, include = FALSE}
+
+my.flex <- function(t, autofit = TRUE) {
+  ft <- flextable(t)
+  ft <- theme_booktabs(ft)
+  ft <- theme_zebra(ft, 
+                    odd_header = rgb(84/255, 141/255, 212/255, 1),
+                    even_body = "transparent",
+                    odd_body = rgb(242/255, 242/255, 242/255, 1))
+  ft <- color(ft, color = "white", part = "header")
+  ft <- italic(ft, italic = TRUE, part = "header")
+  ft <- bold(ft, bold = FALSE, part = "header")
+  if(autofit == TRUE) {
+    ft <- autofit(ft)
+  } else{
+    ft <- set_table_properties(ft, width = 1, layout = "autofit")
+  }
+  return(ft)
+}
+```
+
 
 ```{r loadData, include=FALSE}
 
@@ -74,7 +98,7 @@ if(write_climate == TRUE) {
 ```
 
 ```{r}
-info.tab
+info_tab
 ```
 
 ```{r captions, include = FALSE}
@@ -90,7 +114,7 @@ tab_caps(name = "stats",
 
 # Introduction
 
-This document describes the climate data provided with July 2020 SERL smart meter data release which originates from the Copernicus/ECMWF [ERA5 hourly reanalysis data](https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-single-levels?tab=overview). 
+This document describes the climate data provided with 2020-08 SERL Observatory data release which originates from the from the Copernicus/ECMWF [ERA5 hourly reanalysis data](https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-single-levels?tab=overview). 
 
 More variables will be provided in future releases, but at the moment only temperature at 2 metres is part of the data. It can be linked with SERL participants using the 'gridCell' variable. The filename of this dataset is *`r paste(climate_output_name, ".csv", sep = "")`*. This documentation will be expanded in future as more climate variables are provided with SERL datasets. 
 
@@ -141,14 +165,18 @@ climate_fields[columnNames == "temperature_2_metres_C",
 
 colnames(climate_fields) <- c("Field", "Description", "Units", "Class", "Example value")
 
+
+climate_fields <- my.flex(climate_fields)
+
 ```
 
 `r tab_caps("climate_fields")`
 ```{r}
-kable(climate_fields)
+#kable(climate_fields)
+climate_fields
 ```
 
-Table 2 provides some basic information and statistics about the data.
+Table 2 provides some basic information and statistics about the data. More recent data will be provided with future SERL Observatory data releases. 
 
 ```{r stats, include = FALSE}
 
@@ -174,11 +202,14 @@ stats[Statistic == "Mean temperature (deg C)",
 stats[Statistic == "Number of grid cells", 
       Value := length(unique(climate$gridCell))]
 
+stats <- my.flex(stats)
+
 ```
 
 `r tab_caps("stats")`
 ```{r}
-kable(stats)
+#kable(stats)
+stats
 ```
 
 ```{r save, include = FALSE}
