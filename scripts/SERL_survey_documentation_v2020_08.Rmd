@@ -1,11 +1,11 @@
 ---
 title: "Survey data:  \nTechnical documentation"
 output:
-  html_document:
-    df_print: paged
-    toc: yes
   word_document:
     reference_doc: SERL_word_template_landscape1.docx
+    toc: yes
+  html_document:
+    df_print: paged
     toc: yes
 ---
 
@@ -30,18 +30,18 @@ load("S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/survey_data_for_mark
 fig.h <- 6
 fig.w <- 10
 fullwidth <- TRUE
-fig_caps <- captioner(prefix = "Figure")
-tab_caps <- captioner(prefix = "Table")
 font.size <- 18
 geom.text.size <- 5
 dcp <- 2 # number of decimal places for rounding 
 
+info_tab <- create.info.table(vers = survey_version)
 ```
 
 
 ```{r}
 info_tab
 ```
+
 
 ```{r functions, include = FALSE}
 
@@ -50,22 +50,26 @@ survey.flex <- function(t, autofit = TRUE) {
   ft <- theme_booktabs(ft)
   ft <- border(ft, border.top = fp_border(color = "gray") )
   #ft <- theme_box()
-  ft <- theme_zebra(ft, 
-                     odd_header = rgb(84/255, 141/255, 212/255, 1),
-                     )
+  # ft <- theme_zebra(ft, 
+  #                    odd_header = rgb(84/255, 141/255, 212/255, 1),
+  #                    )
+  ft <- bg(ft, bg = rgb(84/255, 141/255, 212/255, 1), 
+            part = "header")
   ft <- color(ft, color = "white", part = "header")
   ft <- italic(ft, italic = TRUE, part = "header")
   ft <- bold(ft, bold = FALSE, part = "header")
-  if(autofit == TRUE) {
-    ft <- autofit(ft)
-  } else{
-    ft <- set_table_properties(ft, width = 1, layout = "autofit")
-  }
+  # if(autofit == TRUE) {
+  #   ft <- autofit(ft)
+  # } else{
+  #   ft <- set_table_properties(ft, width = 1, layout = "autofit")
+  # }
+  ft <- set_table_properties(ft, width = 1, layout = "autofit")
   return(ft)
 }
 
 
 ```
+
 
 
 
@@ -86,7 +90,7 @@ This document is structured as follows. First we describe the data collection pr
 The SERL pilot study recruited the first wave of participants during September and October 2019. 18,000 households in central and southern England and in Wales were sent up to 4 letters inviting them to participate in SERL. All mailings encouraged sign-up online, and some of the mailings provided a paper consent form and survey to sign up by post. The consent form giving access to their smart meter data was mandatory for participation. Completion of the survey was encouraged but not required. 
 
 
-The survey dataset contains `r nrow(survey_clean)` rows (one per participant who responded) and `r ncol(survey_clean)` columns. 
+The survey dataset contains `r nrow(survey_clean)` rows (one per participant who started the survey) and `r ncol(survey_clean)` columns. 
 
 # Survey data fields: question responses
 
@@ -137,7 +141,10 @@ questionTable[Value == 5 & Label == "Varies â€“ depends on temperature or o
               Label := "Varies - depends on temperature or other reasons"]
 
 
-presentable_questions <- questionTable[!Variable %in% c("Respondent_ID", "Respondent_Serial"),
+presentable_questions <- questionTable[!Variable %in%
+                                         c("Respondent_ID",
+                                           "Respondent_Serial",
+                                           "CELL"),
                                        list(Variable, i.Label, Value, Label, freeText)]
 colnames(presentable_questions) <- c("Survey field", "Approximate question", 
                                      "Possible values", "Value meanings","Freetext option")
@@ -146,8 +153,13 @@ tab_caps(name = "presentable_questions", caption = "Questions, options and possi
 
 # -------------------
 
-presentable2 <- questionTable[!Variable %in% c("Respondent_ID", "Respondent_Serial"),
-                                       list(Variable, i.Label,freeText, Value, Label)]
+presentable2 <- questionTable[!Variable %in% c("Respondent_ID",
+                                               "Respondent_Serial"),
+                                       list(Variable,
+                                            i.Label,
+                                            freeText, 
+                                            Value, 
+                                            Label)]
 
 presentable2[Label == "Donâ€™t know", Label := "Don't know"]
 presentable2[Label == "Dont know / Doesnt apply", Label := "Don't know / Doesn't apply"]
@@ -245,6 +257,10 @@ otherCols.tab[columnNames == "A301_edit",
               `:=`(description = "TRUE if A301 was edited, otherwise FALSE",
                                          example = "FALSE")]
 
+otherCols.tab[columnNames == "A401_edit", 
+              `:=`(description = "TRUE if A401 was edited, otherwise FALSE",
+                                         example = "FALSE")]
+
 otherCols.tab[columnNames == "A4_sum", 
               `:=`(description = "Number of response options selected for question A4 (ie the values of A401 + A402 + .. + A406)",
                                          example = "2")]
@@ -256,7 +272,7 @@ otherCols.tab[columnNames == "A4_err",
 otherCols.tab[columnNames == "A405_edit", `:=`(description = "TRUE if A405 was edited, otherwise FALSE",
                                          example = "FALSE")]
 
-otherCols.tab[columnNames == "A5_edit", `:=`(description = "TRUE if A5 response was very high and therefore assumed to be in Fahrenheit and converted to Celcius, otherwise FASLE.",
+otherCols.tab[columnNames == "A5_edit", `:=`(description = "TRUE if A5 response was very high and therefore assumed to be in Fahrenheit and converted to Celsius, otherwise FASLE.",
                                          example = "FALSE")]
 
 otherCols.tab[columnNames == "A9_sum", 
@@ -276,8 +292,8 @@ otherCols.tab[columnNames == "A16_sum",
                                          example = "2")]
 
 otherCols.tab[columnNames == "A16_edit", 
-              `:=`(description = "",
-                                         example = "TRUE if any A16 responses were edited, otherwise FALSE. If 'not applicable' or 'Not considering any changes' were selected, any other response was removed (except for 'other' which was kept to prevent deleting potentially useful notes), ")]
+              `:=`(description = "TRUE if any A16 responses were edited, otherwise FALSE. If 'not applicable' or 'Not considering any changes' were selected, any other response was removed (except for 'other' which was kept to prevent deleting potentially useful notes). ",
+                                         example = "FALSE")]
 
 otherCols.tab[columnNames == "B5_err", 
               `:=`(description = "B5 error flag: TRUE if B5 < B6 (Number of rooms less than number of bedrooms) or if B5 == 0 (No rooms)",
