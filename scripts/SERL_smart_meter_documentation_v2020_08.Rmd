@@ -141,10 +141,10 @@ tab_caps(name = "read.type.tab",
          caption = "Smart meter data types, defined by 'deviceType' and 'readType'. ")
 
 tab_caps(name = "hh.cols.tab", 
-         caption = "Half-hourly data fields. Error flags are defined in the Error Flags section below.")
+         caption = "Half-hourly data fields. Error flags are defined in the Error Flags section below. Added/derived variables shown in bold.")
 
 tab_caps(name = "d.cols.tab", 
-         caption = "Daily data fields. See the Error Flags section below for definitions of the error flags used in this table.")
+         caption = "Daily data fields. See the Error Flags section below for definitions of the error flags used in this table. Added/derived variables shown in bold.")
 
 tab_caps("relevant.flags", 
          caption = "Error flags and their meanings.") 
@@ -165,22 +165,22 @@ tab_caps("partic.tab",
 
 This document describes the half-hourly and daily datasets available to researchers with secure access to the SERL Observatory datasets, along with two data quality summary tables. The data were collected from the earliest date available. The datasets described in this document are:
 
-- **`r paste(remove.filename.version("daily_data"), "{year}_{month}.csv", sep = "")`**: daily electricity and gas readings with some additional derived columns
+- _`r paste(remove.filename.version("daily_data"), "{year}_{month}.csv", sep = "")`_: daily electricity and gas readings with some additional derived columns
 
-- **`r paste(remove.filename.version("hh_data"), "{year}_{month}.csv", sep = "")`**: half-hourly electricity and gas readings with some additional derived columns (note that this dataset also includes reactive readings and export readings where available)
+- _`r paste(remove.filename.version("hh_data"), "{year}_{month}.csv", sep = "")`_: half-hourly electricity and gas readings with some additional derived columns (note that this dataset also includes reactive readings and export readings where available)
 
-- **`r paste(remove.filename.version("rt_data"), "{year}_{month}.csv", sep = "")`**: data quality summary for each read type for each participant (such as number of errors found by type) and basic read statistics (such as mean and maximum)
+- _`r paste(remove.filename.version("rt_data"), "{year}_{month}.csv", sep = "")`_: data quality summary for each read type for each participant (such as number of errors found by type) and basic read statistics (such as mean and maximum)
 
-- **`r paste(remove.filename.version("ps_data"), "{year}_{month}.csv", sep = "")`**: data quality summary for each participant (less detail than the read-type summary data, but also including basic participant information such as region and number of questions answered on the survey)
+- _`r paste(remove.filename.version("ps_data"), {year}_{month}.csv", sep = "")`_: data quality summary for each participant (less detail than the read-type summary data, but also including basic participant information such as region and number of questions answered on the survey)
 
-where the year and month give the year and month of the data release. 
+where _{year}_ and _{month}_ give the year and month of the data release, _e.g._ 2020_08.
 
 This document is structured as follows: we start with some basic information about how the data was collected and the different types of reading available, then we describe the two smart meter data tables (daily and half-hourly). Next we define the different types of error flag created, and finally we describe the data quality summary tables (at the read-type level and the participant level). 
 
 
 ## Data collection
 
-Half-hourly and daily smart meter readings are stored on the smart meter, and accessed by the Smart Energy Research Lab (SERL) as follows. The University of Essex (UK Data Archive) uses a DCC adaptor service provided by CGI to communicate with the DCC which acts as a pipe to communicate the smart meter readings to CGI who send the readings to the UK Data Archive. This happens every night to collect data from the previous day (midnight - midnight). 
+Half-hourly and daily smart meter readings are stored on the smart meter, and accessed by the Smart Energy Research Lab (SERL) as follows. The University of Essex (UK Data Archive) uses a DCC adaptor service provided by CGI to communicate with the DCC, which acts as a pipe to communicate the smart meter readings to CGI, who send the readings to the UK Data Archive. This happens every night to collect data from the previous day (midnight - midnight).
 
 
 ## Smart meter read types
@@ -250,7 +250,7 @@ read_type_tab
 
 ## Half-hourly data
 
-The half-hourly data table has `r ncol_hh` columns. The fields are described in the table below. While the original data has not been modified, additional columns have been added to flag potential errors (see the Error Flags section below) and convert between units. This processing was done using `r paste(R.Version()$version.string)` (code file *`r sm_processing_filename`*).
+The half-hourly data table has `r ncol_hh` columns. The fields are described in the table below. While the original data has not been modified, additional columns have been added to flag potential errors (see the Error Flags section below) and convert between units. This processing was done using `r paste(R.Version()$version.string)` (code file *`r paste(sm_processing_filename, ".R", sep = "")`*).
 
 Note that if no data were returned for any meter at a particular time then that row will be missing from the dataset rather than being an empty row. Added or derived variables are shown in bold. The 'class' field is the R class (e.g. R calls a Boolean a logical).  
 
@@ -387,7 +387,7 @@ hh_cols_tab
 
 ## Daily data
 
-The daily data table has `r ncol_d` columns. The fields are described in the table below. While original data has not been modified, additional columns have been added to flag potential errors (see Error Flags section below) and to convert between units. This processing was done using `r paste(R.Version()$version.string)` (code file *`r sm_processing_filename`*).
+The daily data table has `r ncol_d` columns. The fields are described in the table below. While original data has not been modified, additional columns have been added to flag potential errors (see Error Flags section below) and to convert between units. This processing was done using `r paste(R.Version()$version.string)` (code file *`r paste(sm_processing_filename, ".R", sep = "")`*).
 
 Note that if no data were returned for any meter on a particular day then that row will be missing from the dataset rather than being empty. 
 
@@ -695,9 +695,9 @@ A read type is a combination of device type and schedule type, such as daily act
                  example = "GPF")]
   
   sched.tab[columnNames == "readType",
-            `:=`(description = "Schedule type: DailyLog, ActiveImport, Export, ReactiveImport, ReactiveExport, ReactiveExport. Note that all are half-hourly except DailyLog",
+            `:=`(description = "Defined in Table 1",
                  units = "NA",
-                 example = "ActiveImport")]
+                 example = "AI")]
   
   sched.tab[columnNames == "theoreticalStart",
             `:=`(description = "Earliest possible reading for the schedule",
