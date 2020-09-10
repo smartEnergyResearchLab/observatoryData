@@ -1,0 +1,777 @@
+---
+title: "SERL survey data preparation code: v01"
+author: "Ellen Webborn, Smart Energy Research Lab, UCL"
+date: "10/09/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+```
+
+```{r}
+# This code prepares the survey data from the SERL pilot study for 
+#  exploratory analysis by SERL consortium researchers as part of the 
+#  2020-08 SERL Observatory Data Release.
+
+# Code developed by Ellen Webborn, UCL using R version 3.6.2 (2019-12-12)
+# Most recent edits made 2020-09-03
+
+# For the latest versions of all code and documentation please visit the SERL
+#  GitHub page https://github.com/smartEnergyResearchLab
+
+
+# Setup -------------------------------------------------------------------
+
+# load relevant libraries 
+library(data.table)
+library(tidyverse)
+library(knitr)
+library(weathermetrics)
+
+# Define which files are needed/what actions are required
+importCsv <- TRUE       # set to false if using RData
+loadRData <- FALSE      # set to false if importing csv or data already loaded
+loadQuestions <- TRUE
+loadPossResp <- TRUE
+cleanData <- TRUE
+
+# Define filenames and locations
+useDirectory <- "S:/ENERGINST_EaB_Project_17_SMRP/Analysis"             # work here
+dataDirectory <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Pilot_survey/"  # keep data here
+filename <- "pilot_survey_data_1675.csv"                                # name of file to import (could be RData)
+filename_questions <- "survey_questions.csv"
+filename_poss_resp <- "possible_responses.csv" # matches variables with possible response values and meaning
+
+
+# FunctionDefinitions -----------------------------------------------------
+
+# Sum elements that are positive
+sum.positive <- function(x){
+  # x is a vector (or similar) of elements to be added (if positive)
+  sum(sapply(x, function(y) max(y, 0)))
+}
+
+# record the new response -4 indicating 'unusable' due to an error found, in (most likely) the survey_questions table
+record.unusable.response <- function(var, table.to.edit = survey_questions) {
+  table.to.edit <- rbind(table.to.edit, table.to.edit[Variable == var][1])
+  i.last <- nrow(table.to.edit)
+  table.to.edit[i.last, Value := "-4"]
+  table.to.edit[i.last, Label := "Unusable"]
+  setkey(table.to.edit, Variable)
+  table.to.edit
+}
+
+# Question D1 is optional if single-occupant household. 
+#  This collects the data entered previously in these cases
+fill.D1 <- function(r) {
+  # r is a row in survey_clean e.g. survey_clean[2,]
+  
+  if(r[D1 > 0, .N] == 1) {
+    ans <- r$D1
+  } else if(r[C2_error == TRUE | C2_sum <= 0 | C1 != 1, .N] == 1) {
+    ans <- -2
+  } else if(r[C2_tot_child == 1, .N] == 1) {
+    ans <- 1
+  } else if(r[C2_Male_16_24 == 1 | C2_Female_16_24 == 1, .N] == 1) {
+    ans <- 2
+  } else if(r[C2_Male_25_44 == 1 | C2_Female_25_44 == 1, .N] == 1) {
+    ans <- 3
+  } else if(r[C2_Male_45_64 == 1 | C2_Female_45_64 == 1, .N] == 1) {
+    ans <- 4
+  } else if(r[C2_Male_65_74 == 1 | C2_Female_65_74 == 1, .N] == 1) {
+    ans <- 5
+  } else if(r[C2_Male_75_84 == 1 | C2_Female_75_84 == 1, .N] == 1) {
+    ans <- 6
+  } else if(r[C2_Male_85_plus == 1 | C2_Female_85_plus == 1, .N] == 1) {
+    ans <- 7
+  } else {ans <- r$D1}
+  ans
+}
+
+fill.D2 <- function(r) {
+  # r is a row in survey_clean e.g. survey_clean[2,] 
+  if(r$D2 != -9) {
+    ans <- r$D2
+  } else if(r[C2_error == TRUE | C2_sum != 1, .N] == 1) {
+    ans <- -2
+  } else if(r[C2_Male_16_24 == 1 | C2_Male_25_44 == 1 | C2_Male_45_64 == 1 |
+              C2_Male_65_74 == 1 | C2_Male_75_84 == 1 | C2_Male_85_plus == 1, .N] == 1) {
+    ans <- 1
+  } else if(r[C2_Female_16_24 == 1 | C2_Female_25_44 == 1 | C2_Female_45_64 == 1 |
+              C2_Female_65_74 == 1 | C2_Female_75_84 == 1 | C2_Female_85_plus == 1, .N] == 1) {
+    ans <- 2
+  } else {ans = 99}
+  ans
+}
+
+fill.D3 <- function(r) {
+  # r is a row in survey_clean e.g. survey_clean[2,] 
+  if(r$D3 != -9) {
+    ans <- r$D3
+  } else if(r[C3_error == TRUE | C3_sum != 1, .N] == 1) {
+    ans <- -2
+  } else if(r[C301 == 1, .N] == 1) {
+    ans <- 1
+  } else if(r[C302 == 1, .N] == 1) {
+    ans <- 2
+  } else if(r[C303 == 1, .N] == 1) {
+    ans <- 3
+  } else if(r[C304 == 1, .N] == 1) {
+    ans <- 4
+  } else if(r[C305 == 1, .N] == 1) {
+    ans <- 5
+  } else if(r[C306 == 1, .N] == 1) {
+    ans <- 6
+  } else if(r[C307 == 1, .N] == 1) {
+    ans <- 7
+  } else {ans = 99}
+  ans
+}
+
+# LoadData ----------------------------------------------------------------
+
+if(importCsv == TRUE) {
+  survey_orig <- fread(paste(dataDirectory, filename, sep = ""))
+} else if (loadRData == TRUE) {
+  load(paste(dataDirectory, filename, sep = ""))
+}
+
+if(loadQuestions == TRUE) {
+  questions <- fread(paste(dataDirectory, filename_questions, sep = ""))
+}
+
+if(loadPossResp == TRUE) {
+  poss_resp <- fread(paste(dataDirectory, filename_poss_resp, sep = ""),
+                           na.strings = c("","NA"))
+  # deal with NAs in Variable column
+  temp.var <- poss_resp[1,Variable]
+  for(i in 2:nrow(poss_resp)) {
+    if(is.na(poss_resp[i,Variable])) {
+      poss_resp[i,Variable := temp.var]
+    }else{
+      temp.var <- poss_resp[i,Variable]
+    }
+  }
+  #remove superfluous extra row
+  poss_resp <- poss_resp[-331,]
+}
+
+
+
+# SurveyQuestions ---------------------------------------------------------
+
+# ---
+# Create table for all survey question information
+# ---
+
+# Merge survey questions and possible responses
+setkey(questions, Variable)
+setkey(poss_resp, Variable)
+survey_questions <- poss_resp[questions]
+
+# Identify (manually) which questions need what kind of error checking
+survey_questions[, ErrorCheck := "None"]
+survey_questions[Variable == "A5", 
+                 ErrorCheck := "Range"] # Thermostat temperature
+survey_questions[Variable == "B3", 
+                 ErrorCheck := "Range"] # Number of households sharing
+survey_questions[Variable == "B5", 
+                 ErrorCheck := "Range"] # Number of rooms
+survey_questions[Variable == "B6", 
+                 ErrorCheck := "RangeCondition"] # Number of bedrooms <= Number of rooms
+survey_questions[Variable == "C1", 
+                 ErrorCheck := "Range"] # Number of occupants
+survey_questions[Variable == "C2_Male_0_15", 
+                 ErrorCheck := "RangeCondition"] # Sum of all C2 = number of occupants
+survey_questions[Variable == "C301", 
+                 ErrorCheck := "RangeCondition"] # Sum of all C3 <= number of occupants
+survey_questions[Variable == "C4", 
+                 ErrorCheck := "RangeCondition"] # Number with degree <= number of occupants
+
+# Identify (manually) which questions may have more answers than the set provided e.g. free text
+survey_questions[, freeText := FALSE]
+freeText_variabes = c("A3_Other", "A5","A16_Other", "B3", "B5", "B6", "C1", "C2", "C3", "C4",
+                      "CELL", "QUINTILE", "LSOA", "REGION")
+survey_questions[Variable %in% freeText_variabes, freeText := TRUE]
+survey_questions[startsWith(Variable, "C2_") |
+                   startsWith(Variable, "C3"), 
+                 freeText := TRUE]
+
+# get rid of NAs formed from merged cells in the original
+for(i in 2:nrow(poss_resp)) {
+  if(is.na(poss_resp[i,1]) == TRUE) {
+    poss_resp[i,1] <- poss_resp[i-1,1]
+  }
+}
+
+colnames(poss_resp) <- c("Variable", "Value", "Meaning")
+colnames(questions) <- c("Variable", "Question")
+
+
+
+# CleanSurveyResponses ----------------------------------------------------
+
+# ---
+# Check each question for data cleaning requirements. Where multiple options
+#  could be selected the data for a question is defined by multiple variables,
+#  e.g. question A3 data is defined by A301, A302, ..., A310
+# ---
+
+survey_clean <- copy(survey_orig)
+
+# remove 2 blank survey responses
+survey_clean <- survey_clean[!(Respondent_ID %in% c("6SJU9MZ1", "J68J3U81"))] 
+
+#### Define new variables for basic stats #####
+nParticipants <- nrow(survey_clean)
+
+
+# Check for repeated rows 
+repeatedRows <- nrow(survey_orig) - length(unique(survey_orig$Respondent_ID))
+if(repeatedRows > 0) {message("Repeated rows")}
+
+
+# Clean data one question at a time
+
+#### A1 ####  
+# --- Before we contacted you about this study, did you know you had a smart meter?
+
+sort(unique(survey_clean$A1))  #  -2  1  2 - Fine
+
+
+#### A2 ####
+# --- To what extent (if at all) has having a SM affected your energy use (approx wording)
+
+sort(unique(survey_clean$A2))  # -9 -2 -1  1  2  3  4 - Fine  
+
+# Check A2 got skipped if necessary
+survey_clean[A1 == 2 & A2 != -9, .N] # 9, most of whom didn't answer
+survey_clean[A1 == 2 & A2 != -9, A2 := -9]
+
+
+#### A3 ####
+# --- Type of central heating
+
+# Test whether the question was answered
+survey_clean[, A3_sum := A301 + A302 + A303 + A304 + A305 + A306 + A307 + A308 + A309 + A310]
+survey_clean[, .N, by = A3_sum] # 26 with no answer
+
+# Check A3 for no central heating vs some
+A3.cols <- c("A301","A302","A303","A304","A305","A306","A307","A308","A309","A310")
+survey_clean[A301 == 1 & sum(get(A3.cols)) > 1, .N] # 18 
+survey_clean[, `:=`(A3_err = FALSE, A301_edit = FALSE)]
+for(i in 2:length(A3.cols)) {
+  survey_clean[A301 == 1 & get(A3.cols[i]) == 1, A3_err := TRUE]
+}
+
+# change the 'no central heating' to no for those with central heating, record an error was found and A301 was edited
+survey_clean[A3_err == TRUE, `:=`(A301 = 0, A301_edit = TRUE)]
+
+
+#### A4 ####
+# --- Which, if any, of the following controls does your central heating system have?
+
+# Check A4 got skipped if necessary
+survey_clean[A301 == 1 & A401 != -9, .N] # 7 should have skipped
+
+# change 0 to -9 in A401:A406 for those with no central heating
+for(i in 1:6) {
+  survey_clean[A301 ==1, paste("A40",i, sep = "") := -9]
+}
+
+# get a sum to record no response (when one was possible)
+survey_clean[, A4_sum := A401 + A402 + A403 + A404 + A405 + A406]
+survey_clean[, .N, by = A4_sum] # 23 with no answer
+
+# Check no 'none of these' plus something else
+survey_clean[A405 == 1 & A4_sum > 1, .N] # 1 
+survey_clean[, `:=`(A4_err = FALSE, A405_edit = FALSE)]
+# get rid of 'none of these' since one has been selected
+survey_clean[A405 == 1 & A4_sum > 1,`:=`(A405 = 0, A4_err = TRUE, A405_edit = TRUE)] 
+
+#### A5 ####
+# --- Temperature controller set at for late afternoons or evenings
+
+# Test for people reporting a temperature setting having previously said they couldn't
+survey_clean[A402 != 1 & A403 != 1 & A5 > -1, .N] # 53, generally reporting a timer or only controlled manually
+
+# Replace don't know/not applicable, no answer and answer with -9 if not applicable
+survey_clean[A402 !=1 & A403 != 1, A5 := -9]
+
+# Convert number from assumed Fahrenheit to Celsius if relevant, record that the number was edited
+survey_clean[, A5_edit := FALSE]
+upper.cel <- 35 # Maximum number we accept as a temperature in degrees C
+survey_clean[A5 > upper.cel, `:=`(A5 = fahrenheit.to.celsius(A5, round = 1),
+                                  A5_edit = TRUE)]
+survey_clean[A5_edit == TRUE, .N] # 23
+sort(unique(survey_clean$A5)) # -9.0 -2.0 -1.0  0.0  2.0 10.0 12.0 12.8 13.0 15.0 
+ # 15.6 16.0 16.5 17.0 17.5 17.8 18.0 18.3 18.9 19.0 19.5 20.0 20.5 21.0 21.1 
+ # 21.5 22.0 22.2 22.5 23.0 23.5 23.9 24.0 25.0 26.0 26.7 27.0 28.0 29.0 30.0 32.0
+
+
+#### A6 ####
+# --- Does your household use any standalone heaters
+
+sort(unique(survey_clean$A6)) # -2  1  2 - Fine
+
+
+#### A7 ####
+# --- Do any of your standalone heaters have their own source of power
+sort(unique(survey_clean$A7)) # -9 -2  1  2 - Fine
+
+# Check A7 skip
+survey_clean[A6 == 1 & A7 != -9, .N] # 365
+survey_clean[A6 == 1 & A7 != -9, .N, by = A7] 
+# 3 non-existent heaters with their own source of fuel, 
+# 38 non-existent heaters without their own fuel, 
+# 324 no answer (should have been coded -9 not -2)
+
+survey_clean[A6 == 1, A7 := -9]
+
+
+#### A8 ####
+# --- How often are these heaters used in cold weather?
+
+sort(unique(survey_clean$A8)) # -9 -2 -1  1  2  3  4  5 - Fine
+
+# Check A8 skip
+survey_clean[A8 != -9 & (A6 == 1 | A7 == 2), .N] # 679 Should have been coded -9
+survey_clean[A8 != -9 & A8 != -2 & (A6 == 1 | A7 == 2), .N] # 186 answered unexpectedly
+
+survey_clean[A6 == 1 | A7 == 2, A8 := -9]
+
+
+#### A9 #### 
+# --- Reasons for adjusting heating
+
+# Multiple variables (A901 - A907)
+
+# Add variable to assess non-response
+survey_clean[, A9_sum := A901 + A902 + A903 + A904 + A905 + A906 + A907]
+survey_clean[, .N, by = A9_sum] # 19 with no response
+
+# Check none of these and something else hasn't been ticked
+survey_clean[A907 == 1 & A9_sum > 1, .N] # 0 - not an issue
+
+
+#### A10 ####
+# --- How often do you adjust heating controls when house is unoccupied
+sort(unique(survey_clean$A10)) # -2  1  2  3  4  5  6 - Fine
+
+
+#### A11 ####
+# --- During the winter, are there living spaces not normally heated
+sort(unique(survey_clean$A11)) # -2  1  2 - Fine
+
+
+#### A12 ####
+# --- How hot water in the taps and shower is heated
+# --- 12 variables, half for taps, half for showers
+
+survey_clean[, A12_Taps_sum := A12_Taps_GB + A12_Taps_EH + A12_Taps_SWH + A12_Taps_Other + A12_Taps_NA + A12_Taps_DK]
+survey_clean[, A12_Shower_sum := A12_Shower_GB + A12_Shower_EH + A12_Shower_SWH + A12_Shower_Other + A12_Shower_NA + A12_Shower_DK]
+survey_clean[, .N, by = A12_Taps_sum] # 22 with no answer
+survey_clean[, .N, by = A12_Shower_sum] # 92 no answer
+
+
+#### A13 ####
+# --- A13_01 How often do you switch off lights not being used?
+sort(unique(survey_clean[,A13_01])) # -2  1  2  3  4  6 - Fine
+
+# --- How often do you put more clothes on when you feel cold rather than putting the heating on or turning it up?
+sort(unique(survey_clean[,A13_02])) # -2  1  2  3  4  5  6 - Fine
+
+
+#### A14 ####
+# --- How much effort do you say your household makes to limit energy usage
+sort(unique(survey_clean[,A14])) # -2 -1  1  2  3  4 - Fine
+
+
+#### A15 ####
+# --- How often will your household open the windows on 
+# --- (01) a typical warm day
+sort(unique(survey_clean[,A1501])) # -2 -1  1  2  3  4  5 - Fine
+
+# --- (02) a typical cold day
+sort(unique(survey_clean[,A1502])) # -2  1  2  3  4  5 - Fine
+
+
+#### A16 ####
+# --- Which of the following, if any, is your household considering replacing or adding to
+# ---  your heating or energy supply in the next 12 months?
+
+# Deal with 'BLANK' and "" in the 'other - please specify' option
+survey_clean[A1610 == 0 & A16_Other != "", A16_Other] # 14
+survey_clean[A16_Other == "BLANK" & A1610 == 0, A16_Other := ""] # 4 removed
+survey_clean[A16_Other != "", A1610 := 1] # 47 with A1610 = 1
+
+survey_clean[, A16_sum := A1601 + A1602 + A1603 + A1604 + A1605 + A1606 + A1607 + A1608 + A1609 + A1610]
+survey_clean[, .N, by = A16_sum] # 24 with no response
+
+# If not applicabale - cannot do this, shouldn't have any other option 
+#  (though leaving the 'other' option available as people are making notes on other things there)
+
+survey_clean[, A16_edit := FALSE]
+for(i in c(1, 3:9)){
+  survey_clean[A1602 == 1 & get(paste("A160", i, sep = "")) == 1, A16_edit := TRUE]
+  survey_clean[A1602 == 1 & get(paste("A160", i, sep = "")) == 1, eval(paste("A160", i, sep = "")) := 0]
+}
+# 6 edited
+
+survey_clean[, A16_sum := A1601 + A1602 + A1603 + A1604 + A1605 + A1606 + A1607 + A1608 + A1609 + A1610]
+
+
+survey_clean[A1601 == 1 & A16_sum > 1, .N] # 9 not considering anything but also selected another option
+
+for(i in c(3:9)){
+  survey_clean[A1601 == 1 & get(paste("A160", i, sep = "")) == 1, A16_edit := TRUE]
+  survey_clean[A1601 == 1 & get(paste("A160", i, sep = "")) == 1, eval(paste("A160", i, sep = "")) := 0]
+} # 2 more edited
+
+survey_clean[, A16_sum := A1601 + A1602 + A1603 + A1604 + A1605 + A1606 + A1607 + A1608 + A1609 + A1610]
+
+survey_clean[A1610 == 1, A16_Other] # More cleaning required of free text response (later)
+survey_clean[A1610 == 0 & A16_Other != "", A16_Other] # None
+
+
+#### B1 ####
+# --- What type of accommodation do you live in
+
+sort(unique(survey_clean$B1)) # -2  1  2  3  4  5  6 Fine
+
+#### B2 ####
+# --- Is your accomodation self contained
+sort(unique(survey_clean$B2)) # -2  1  2 Fine
+
+#### B3 #### 
+# --- How many other households do you share with
+
+### Check B3: Number of households sharing
+sort(unique(survey_clean$B3)) #  -9 -2  0  1  2  3  4  5  8 24 30 58
+survey_clean[, .N, by = B3] # some households sharing, some with a ridiculously high number
+
+survey_clean[B2 == 1 & B3 > 0, .N] # 52 reported self-contained and sharing (should've skipped)
+survey_clean[B2 == 1, B3 := -9]
+survey_clean[, .N, by = B3] # anomalies sorted out now, max sharing with is 3
+
+#### B4 #### 
+# --- Do you own or rent this accomodation
+
+sort(unique(survey_clean$B4)) # -2  1  2  3  4  5 Fine
+
+
+#### B5 and B6 ####
+### B5
+# --- How many rooms are available for use by this household
+
+sort(unique(survey_clean$B5)) # -2  0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 19 21
+
+### B6
+# --- How many of these rooms are bedrooms
+sort(unique(survey_clean$B6)) # -2  0  1  2  3  4  5  6  7 8
+
+### Compare for impossible combinations
+
+survey_clean[B5 < B6 & B5 != -2, B5:B6] # 6 with more bedrooms than rooms 
+
+# Set up error flag
+survey_clean[, `:=`(B5_err = FALSE, B6_err = FALSE)]
+survey_clean[B5 < B6 & B5 != -2, `:=`(B5_err = TRUE, B5 = -4, B6_err = TRUE, B6 = -4)]
+
+# Add new response option to the survey questions
+survey_questions <- record.unusable.response("B5")
+survey_questions <- record.unusable.response("B6")
+
+nrow(survey_clean[B5 == 0]) # 1
+survey_clean[B5 == 0, `:=`(B5_err = TRUE)]
+nrow(survey_clean[B6 == 0]) # 2 - change to 1 as in the Census
+survey_clean[B6 == 0, B6 := 1]
+
+
+#### B7 ####
+# --- During the cold winter weather can you keep comfortably warm
+sort(unique(survey_clean$B7)) # Fine -2 -1  1  2
+
+#### B8 ####
+# --- Do you have problems with condensation, damp or mould
+sort(unique(survey_clean$B8)) # Fine -2 -1  1  2
+
+#### B9 ####
+# --- When was your accomodation built
+
+sort(unique(survey_clean$B9)) # Fine -2 -1  1  2  3  4  5  6  7
+
+#### B10 ####
+# --- Appliances
+# --- Multiple variables B1001:B1014
+survey_clean[, B10_sum := B1001 + B1002 + B1003 + B1004 + B1005 + B1006 + B1007 + B1008 + B1009 +
+               B1010 + B1011 + B1012 + B1013 + B1014]
+survey_clean[, .N, keyby = B10_sum] # 20 with no response
+
+#### C1 ####
+# --- Number of occupants
+
+sort(unique(survey_clean$C1)) # 0:9
+survey_clean[, .N, keyby = C1] # 7 with 0 occupants
+survey_clean[, C1_new := as.integer(C1)] # cleaning required, creating new variable to store cleaned version
+survey_clean[C1 == 0, C1_new := -2]
+
+# More edits to be made to C1_new when considering C2.
+
+#### C2 ####
+# --- Occupants' age and gender
+# Want number of males and females by age adds up to C1 (No. of occupants)
+
+## Get the number of occupants according to C2
+survey_clean[, C2_sum := sapply(1:nParticipants, 
+                                function(x) sum.positive(survey_clean[x, C2_Male_0_15:C2_Female_85_plus]))]
+
+## Clearly some issues
+sort(unique(survey_clean$C2_sum)) # 0   1   2   3   4   5   6   7   8   9  13  57  85 136 158
+
+## Deal with non-response
+survey_clean[C2_sum == 0, C2_sum := -2] # Re-code non-response
+
+## Take the difference to identify incorrect sum
+survey_clean[, C2_sum_diff := C2_sum - C1_new]
+# Define the sum as 'correct' if one or both of these questions wasn't answered
+survey_clean[C2_sum == -2 | C1_new == -2, C2_sum_diff := 0]
+
+# Investigate
+survey_clean[C2_sum_diff != 0, .N, by = C2_sum_diff]
+
+# Flag whether C2 data should be ignored 
+survey_clean[, C2_error := FALSE]
+survey_clean[C2_sum != C1_new & C2_sum != -2 & C1_new != -2, 
+             C2_error := TRUE] # This will be corrected for special cases next
+
+# Manually correct the numbers of people in each age/sex category when clear that age has been entered not number
+# This isn't ideal and doesn't scale but it works well enough for the pilot study. 
+
+survey_clean[Respondent_ID == "AFDRAG81", `:=`(C2_Male_0_15 = 1,
+                                               C2_Male_25_44 = 1,
+                                               C2_Female_0_15 = 1,
+                                               C2_Female_25_44 = 1,
+                                               C2_error = FALSE,
+                                               C2_sum = 4,
+                                               C2_sum_diff = 0)] # Ages entered
+survey_clean[Respondent_ID == "B32UPRT1", `:=`(C2_Male_45_64 = 1,
+                                               C2_Female_65_74 = 1,
+                                               C2_error = FALSE,
+                                               C2_sum = 2,
+                                               C2_sum_diff = 0)] # Ages entered
+# H52LRF61: C2 error remains, since multiple categories filled but D answers imply only one occupant
+survey_clean[Respondent_ID == "JLK1XTM1", `:=`(C2_Male_25_44 = 2,
+                                               C2_error = FALSE,
+                                               C2_sum = 2,
+                                               C2_sum_diff = 0)] # assumed tally notation used (recorded as 11 not 2)
+survey_clean[Respondent_ID == "LUVGEMJ1", `:=`(C2_Male_75_84 = 1,
+                                               C2_Female_75_84 = 1,
+                                               C2_error = FALSE,
+                                               C2_sum = 2,
+                                               C2_sum_diff = 0)] # Ages entered
+survey_clean[Respondent_ID == "SK9D2GE1", `:=`(C2_Male_45_64 = 1,
+                                               C2_error = FALSE,
+                                               C2_sum = 1,
+                                               C2_sum_diff = 0)] # Age entered
+
+# Calculate number of children
+survey_clean[, C2_tot_child := sapply(1:nParticipants, 
+                                      function(x) sum.positive(survey_clean[x, c("C2_Male_0_15", 
+                                                                                 "C2_Female_0_15")]))]
+survey_clean[C2_error == TRUE | C2_sum == -2, C2_tot_child := -2]
+
+# Calculate number of adults
+survey_clean[, C2_tot_adult := sapply(1:nParticipants, 
+                                      function(x) { 
+                                        sum.positive(survey_clean[x, c("C2_Male_16_24", 
+                                                                       "C2_Male_25_44", 
+                                                                       "C2_Male_45_64",
+                                                                       "C2_Male_65_74", 
+                                                                       "C2_Male_75_84", 
+                                                                       "C2_Male_85_plus",
+                                                                       "C2_Female_16_24", 
+                                                                       "C2_Female_25_44", 
+                                                                       "C2_Female_45_64",
+                                                                       "C2_Female_65_74", 
+                                                                       "C2_Female_75_84", 
+                                                                       "C2_Female_85_plus")
+                                                                  ]
+                                                     )}
+                                      )]
+survey_clean[C2_error == TRUE | C2_sum == -2, C2_tot_adult := -2]
+
+survey_clean[C2_tot_adult == 0, C2_error := TRUE] # Must be at least one adult (16+) in a house
+
+# Calculate number of over 65s
+survey_clean[, C2_tot_65_plus := sapply(1:nParticipants, 
+                                        function(x) sum.positive(survey_clean[x, c("C2_Male_65_74", "C2_Male_75_84", 
+                                                                                   "C2_Male_85_plus", "C2_Female_65_74",
+                                                                                   "C2_Female_75_84", "C2_Female_85_plus")]))]
+survey_clean[C2_error == TRUE | C2_sum == -2, C2_tot_65_plus := -2]
+
+# Don't record non-response as an error
+#survey_clean[C2_sum == -2, C2_error := FALSE]
+
+# Investigate further
+survey_clean[C2_sum_diff != 0 & C1_new != -2 & C2_sum != -2, C1:C1_new]
+survey_clean[C2_sum_diff != 0 & C1_new != -2 & C2_sum != -2 & C2_sum > C1_new, C1:C1_new]
+survey_clean[C2_error == TRUE, .N] # 31
+survey_clean[C2_error == TRUE, C1:C1_new]
+survey_clean[C2_sum_diff > 10, ] # none
+
+# All household members 65+?
+survey_clean[, All_65_plus := -2]
+survey_clean[C1_new > 0 & C2_error == FALSE & C2_tot_65_plus == C1_new, All_65_plus := 1]
+survey_clean[C1_new > 0 & C2_error == FALSE & C2_tot_65_plus < C1_new, All_65_plus := 0]
+survey_clean[, .N, keyby = All_65_plus] # 575 all 65+, 1038 not all 65+, 60 we don't know
+
+
+#### C3 ####
+# --- Working status of each occupant (numbers in each category)
+
+## Create new variable, 'C3_sum'
+survey_clean[, C3_sum := sapply(1:nParticipants, 
+                                function(x) sum.positive(survey_clean[x, C301:C307]))]
+
+## Take the difference to identify incorrect sum
+survey_clean[, C3_sum_diff := C3_sum - C2_tot_adult]
+
+## Flag whether C3 data should be ignored with C3_Error
+survey_clean[, C3_error := FALSE]
+survey_clean[C3_sum_diff > 0 & C2_tot_adult != -2, C3_error := TRUE] # This will be corrected for special cases next
+
+## If C2 is an error and C3_sum = C1 then can take as valid
+survey_clean[C2_error == TRUE & C3_sum == C1_new, C3_error := FALSE]
+
+## Investigate and manually correct where possible
+survey_clean[C3_sum_diff > 0 & C2_error == FALSE & C1_new != -2, 
+             c("C1", "C1_new", "C2_tot_adult", "C3_sum", "C3_sum_diff")]
+# discovered the issue that some people fall into 2 categories. 
+#  Eg 2 retired people who also work paid or unpaid less than 30 hours per week
+
+# Correct obvious mistakes
+survey_clean[, C3_edit := FALSE] # to record any editing
+survey_clean[Respondent_ID == "CN27E331", `:=`(C306 = 1, C3_error = FALSE, C3_edit = TRUE)] # only 1 person household
+survey_clean[Respondent_ID == "3FPM1891", `:=`(C306 = 2, C3_error = FALSE, C3_edit = TRUE)] # 1 person
+survey_clean[Respondent_ID == "WWTCLHJ1", `:=`(C301 = 1, C3_error = FALSE, C3_edit = TRUE)] # hours per week
+survey_clean[Respondent_ID == "S63UCVN1", `:=`(C302 = 1, C3_error = FALSE, C3_edit = TRUE)] # hours per week
+survey_clean[Respondent_ID == "XC85PCW1", `:=`(C302 = 1, C3_error = FALSE, C3_edit = TRUE)] # had 11 for 1 person
+survey_clean[Respondent_ID == "UB95SP81", `:=`(C301 = 1, C3_error = FALSE, C3_edit = TRUE)] # had 3 in C301, single occupier
+
+survey_clean[C3_error == TRUE, .N] #69
+
+# Record if no one was working 
+survey_clean[, None_working := -2]
+survey_clean[C3_error == FALSE & C301 <= 0 & C302 <= 0, None_working := 1]
+survey_clean[C3_error == FALSE & (C301 > 0 | C302 > 0), None_working := 0]
+
+
+#### C4 ####
+# --- How many people in household hold a degree or higher qualification
+
+survey_clean[, C4_error := FALSE]
+survey_clean[C4 > C1_new & C1_new != -2, C4_error := TRUE] 
+survey_clean[C4_error == TRUE, .N] #2
+
+sort(unique(survey_clean$C4)) # -2 -1  0  1  2  3  4  7
+
+
+#### C5 ####
+# --- Does household have plug in electric vehicle
+
+sort(unique(survey_clean$C5)) # Fine -2 -1  1  2
+
+#### C6 ####
+# --- When does household charge electric vehicle at home
+
+sort(unique(survey_clean$C6)) # Fine -9 -2 -1  1  2  3  4
+survey_clean[C5 != 1 & C6 != -9, .N] # 46
+survey_clean[C5 != 1 & C6 != -9, C6 := -9] 
+
+# Skipping most D for now
+
+#### D1 ####
+# --- Age of respondent (not required if single occupant)
+
+survey_clean[D1 == -2 & C1_new == 1, .N] # 69 should be coded as -9 (will then have data filled if available)
+
+survey_clean[, D1_new := D1]
+
+# Use the fill.D1 function to populate D1 if valid answer in C2
+survey_clean[, D1_new := sapply(1:nParticipants, function(x) fill.D1(survey_clean[x,]))]
+
+sort(unique(survey_clean$D1_new)) # -2  2  3  4  5  6  7 
+survey_clean[D1_new == -9, .N] # 0
+survey_clean[D1_new == -2, .N] # 37
+survey_clean[D1_new == -2 & C1_new == 1 & C2_error == FALSE, .N] # 12
+
+
+#### D2 ####
+# --- Gender of respondent (not required if single occupant)
+
+sort(unique(survey_clean$D2)) # -9 -3 -2  1  2  3 Fine
+survey_clean[, .N, keyby = D2] # 87 no answer, 174 not applicable as single occupant
+
+# Use the fill.D2 function to populate D2 if valid answer in C2
+survey_clean[, D2_new := sapply(1:nParticipants, function(x) fill.D2(survey_clean[x,]))]
+
+survey_clean[, .N, keyby = c("D2", "D2_new")] # 9 didn't respond previously, total of 87 with no response
+
+
+
+#### D3 ####
+# --- Current employment status of respondent (not required if single occupant)
+
+sort(unique(survey_clean$D3)) # -9 -3 -2  1  2  3  4  5  6  7
+survey_clean[, .N, keyby = D3] # 174 not applicable, 92 no response
+
+# Use the fill.D3 function to populate D2 if valid answer in C2
+survey_clean[, D3_new := sapply(1:nParticipants, function(x) fill.D3(survey_clean[x,]))]
+
+survey_clean[, .N, keyby = c("D3", "D3_new")] # only 16 couldn't have their answer filled
+
+
+#### D4 ####
+# --- How well do you manage financially
+
+sort(unique(survey_clean$D4)) # -3 -2  1  2  3  4  5 Fine
+
+
+
+#### Reorder columns for export ####
+
+colnames(survey_clean) 
+
+setnames(
+  survey_clean,
+  old = c(
+    "Respondent_ID",
+    "CELL",
+    "Collection_Method",
+    "QUINTILE",
+    "REGION"),
+  new = c("PUPRN",
+          "Cell",
+          "Collection_method",
+          "IMD_quintile",
+          "Region")
+)
+
+survey_reordered <- survey_clean[, c(1, 121, 120, 119, 3:18, 124:126, 19:24, 127:129, 25, 130, 26:35, 131,
+                                     36:43, 132, 44:49, 133, 50:65, 134:135, 66:70, 136, 71, 137, 72:88, 138,
+                                     89, 139, 90:103, 140:146, 104:110, 147:151, 111, 152, 112:114, 153, 
+                                     115, 154, 116, 155, 117)]
+
+colnames(survey_reordered) 
+x <- colnames(survey_clean)
+y <- colnames(survey_reordered)
+x[!x %in% y]
+
+fwrite(survey_reordered, file = "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/InitialStaticDataset/survey_data_pilot_study.csv")
+save(survey_reordered, file = "S:/ENERGINST_EaB_Project_17_SMRP/Data/Researcher data/survey_data_pilot_study.RData")
+
+
+
+```
