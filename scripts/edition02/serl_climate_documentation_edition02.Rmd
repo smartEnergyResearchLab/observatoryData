@@ -1,0 +1,290 @@
+---
+title: "Climate data:  \nTechnical documentation"
+output: 
+  word_document:
+    reference_doc: SERL_word_template_landscape1.docx
+    toc: no
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+library(data.table)
+library(lubridate)
+library(knitr)
+library(captioner)
+library(flextable)
+
+# Import all file names, locations, source function files
+source("D:/Users/ucldata/observatory_release_pre_processing/observatoryData/scripts/edition02/setup_edition02.R")
+
+info_tab <- create.info.table(auth = "Ellen Webborn, Jessica Few")
+
+```
+
+```{r defineInputs, include = FALSE}
+
+load_climate <- TRUE # True if already have the RData climate data to use
+write_climate <- FALSE
+
+```
+
+
+```{r functions, include = FALSE}
+
+my.flex <- function(t, autofit = FALSE) {
+  ft <- flextable(t)
+  ft <- theme_booktabs(ft)
+  ft <- theme_zebra(ft, 
+                    odd_header = rgb(84/255, 141/255, 212/255, 1),
+                    even_body = "transparent",
+                    odd_body = rgb(242/255, 242/255, 242/255, 1))
+  ft <- color(ft, color = "white", part = "header")
+  ft <- italic(ft, italic = TRUE, part = "header")
+  ft <- bold(ft, bold = FALSE, part = "header")
+  if(autofit == TRUE) {
+    ft <- autofit(ft)
+  } else{
+    ft <- set_table_properties(ft, width = 1, layout = "autofit")
+  }
+  return(ft)
+}
+```
+
+
+```{r loadData, include=FALSE}
+
+if(load_climate == FALSE) {
+
+climate_orig <- fread(paste(location_climate, climate_filename, sep = ""))
+
+climate <- copy(climate_orig)
+
+climate[, analysis_date := ymd(analysis_date)]
+climate[, date_time := ymd_hms(date_time)]
+
+setnames(climate, "date_time", "date_time_utc")
+
+save(climate,
+     file = paste(location_climate, climate_output_name, ".RData", sep = "")
+     )
+
+} else {
+  load(paste(location_climate, climate_output_name, ".RData", sep = ""))
+}
+
+if(write_climate == TRUE) {
+  fwrite(climate,
+         file = paste(location_processed, climate_output_name, ".csv", sep = ""))
+}
+
+
+```
+
+```{r}
+info_tab
+```
+
+```{r captions, include = FALSE}
+
+tab_caps(name = "climate_fields", 
+         caption = "Climate data fields.")
+
+```
+
+
+# Introduction
+
+This document describes the climate data provided with the SERL Observatory data Edition `r release` which originates from the from the Copernicus/ECMWF [ERA5 hourly reanalysis data](https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-single-levels?tab=overview). 
+
+Climate variables can be linked to participant data using the *grid_cell* variable. The filename of this dataset is *`r paste(climate_output_name, ".csv", sep = "")`*. Note that while data quality analysis has been performed for this dataset, it is up to users to perform more detailed checks as required for their analysis. 
+
+# Overview
+
+The climate data has `r ncol(climate)` columns and `r format(nrow(climate), big.mark = ",", scientific = FALSE)` rows. This is reanalysis data based on recorded data from many weather stations across GB, at a horizontal resolution of 0.25 x 0.25 degrees latitude and longitude (approximately 28 sq. km). 
+
+The *grid_cell* variable is in the format *xx_yy* where *xx* indicates latitude and *yy* indicates longitude such that *00_00* refers to latitude 61 and longitude -8 and an increase of 1 in *xx* represents a -0.25 change in latitude and an increase of 1 in *yy* indicates a +0.25 increase in longitude. Data are provided for grid cells with a link to at least one participant; data for grid cells with no participants are not provided to reduce file size. More information about spatial resolution is available [here](https://confluence.ecmwf.int/display/CKB/ERA5%3A+What+is+the+spatial+reference). ERA5 documentation is available [here](https://confluence.ecmwf.int/display/CKB/ERA5%3A+data+documentation).
+
+The fields provided in the current SERL climate dataset are described in Table 1. Further information about the parameters can be found [here](https://confluence.ecmwf.int/display/CKB/ERA5%3A+data+documentation#ERA5:datadocumentation-Parameterlistings)
+
+```{r fieldsTable, include = FALSE}
+
+nrow_climate <- nrow(climate)
+ncol_climate <- ncol(climate)
+
+climate_fields <- data.table(columnNames = colnames(climate),
+                            description = rep(NA_character_, ncol_climate),
+                            units = rep(NA_character_, ncol_climate),
+                            class = lapply(climate, class),
+                            example = rep(NA_character_, ncol_climate))
+
+
+climate_fields[columnNames == "grid_cell",
+               `:=`(description = "Grid cell for linking to participant data (see details above)",
+                    units = "NA",
+                    example = "38_31")]
+
+climate_fields[columnNames == "analysis_date",
+               `:=`(description = "Date the data refers to",
+                    units = "NA",
+                    example = "2018-08-01")]
+
+climate_fields[columnNames == "date_time_utc",
+               `:=`(description = "Time and date of the data in UTC",
+                    units = "%Y-%m-%d %H:%M:%S",
+                    example = "2018-08-01 00:00:00")]
+
+
+climate_fields[columnNames == "2m_temperature_K",
+               `:=`(description = "Temperature at 2 metres from the surface",
+                    units = "K",
+                    example = "285.12")]
+
+
+climate_fields[columnNames == "2m_dewpoint_temperature_K",
+               `:=`(description = "A measure of humidity. The temperature to which the air, 2m above the surface, would need to be cooled for saturation to occur.",
+                    units = "K",
+                    example = "282.88")]
+
+climate_fields[columnNames == "minimum_2m_temperature_K",
+               `:=`(description = "The lowest temperature of the air at 2m above the surface since the last record.",
+                    units = "K",
+                    example = "285.66")]
+
+climate_fields[columnNames == "maximum_2m_temperature_K",
+               `:=`(description = "The highest temperature of the air at 2m above the surface since the last record.",
+                    units = "K",
+                    example = "285.82")]
+
+climate_fields[columnNames == "skin_temperature_K",
+               `:=`(description = "Temperature of the surface of the Earth.",
+                    units = "K",
+                    example = "286.48")]
+
+climate_fields[columnNames == "soil_temperature_level_1_K",
+               `:=`(description = "Temperature of the soil at a depth of 3.5cm.",
+                    units = "K",
+                    example = "286.71")]
+
+climate_fields[columnNames == "mean_total_precipitation_rate",
+               `:=`(description = "Rate of precipitation at Earth's surface if spread evenly over the grid box. This is the sum of large-scale and convective precipitation.  This is the mean precipitation over the previous hour.",
+                    units = "kg m^-2 s^-1",
+                    example = "0.0000705739")]
+
+climate_fields[columnNames == "total_precipitation",
+               `:=`(description = "Accumulated liquid and frozen water that falls to the Earth's surface (rain and snow). This is the sum of large-scale and convective precipitation. This does not include fog, dew or precipitation that evaporates before reaching the surface. This is the total water accumulated over the previous hour.",
+                    units = "m",
+                    example = "0.0002527048")]
+
+climate_fields[columnNames == "large_scale_rain_rate",
+               `:=`(description = "Rate of rainfall generated by the cloud scheme in the ECMWF forecast at the specified time. Rainfall can also be generated by the convection scheme which represents spatial scales smaller than the grid box.",
+                    units = "kg m^-2 s^-1",
+                    example = "0.0000467318")]
+
+climate_fields[columnNames == "large_scale_precipitation",
+               `:=`(description = "Accumulated liquid and frozen water that falls to the Earth's surface (rain and snow) which is generated by the cloud scheme in the forecast. Precipitation can also be generated by the convection scheme which represents spatial scales smaller than the grid box. This does not include fog, dew or the precipitation which evaporates before reaching the surface.",
+                    units = "m",
+                    example = "0.0001330674")]
+
+climate_fields[columnNames == "precipitation_type",
+               `:=`(description = "Categorical variables indicating the type of precipitation falling on the surface at the specified time. 0 = No precipitation; 1 = Rain; 3 = Freezing rain (i.e. supercooled raindrops which freeze on contact with the ground and other surfaces); 5 = Snow; 6 = Wet snow (i.e. snow particles which are starting to melt); 7 = Mixture of rain and snow; 8 = Ice pellets",
+                    units = "NA",
+                    example = "1")]
+
+climate_fields[columnNames == "surface_pressure",
+               `:=`(description = "Pressure of the atmosphere on the surface.",
+                    units = "Pa",
+                    example = "99918.19")]
+
+climate_fields[columnNames == "mean_sea_level_pressure",
+               `:=`(description = "Pressure of the atmosphere adjusted to the mean sea level.",
+                    units = "Pa",
+                    example = "100540.61")]
+
+climate_fields[columnNames == "surface_solar_radiation_downwards",
+               `:=`(description = "The amount of solar radiation (direct and diffuse) that reaches a horizontal plane at the surface of the Earth, averaged over the grid box. This is a reasonably good approximation of what would be measured by a pyranometer. This parameter is accumulated over the previous hour. Convention for vertical fluxes is positive downwards.",
+                    units = "J m^-2",
+                    example = "723895")]
+
+climate_fields[columnNames == "clear_sky_direct_solar_radiation_at_surface",
+               `:=`(description = "The amount of direct radiation reaching the surface of the Earth assuming cloudless conditions. This is the amount of radiation passing through a horizontal plane, not a plane perpendicular to the direction of the Sun. 
+This parameter is accumulated over the previous hour.
+Convention for vertical fluxes is positive downwards.",
+                    units = "J m^-2",
+                    example = "1002024")]
+
+climate_fields[columnNames == "total_sky_direct_solar_radiation_at_surface",
+               `:=`(description = "The amount of direct solar radiation reaching the surface of the Earth - this is the amount of radiation passing through a horizontal plane, not a plane perpendicular to the direction of the Sun. This parameter is accumulated over the previous hour. Convention for vertical fluxes is positive downwards.",
+                    units = "J m^-2",
+                    example = "408370")]
+
+climate_fields[columnNames == "total_cloud_cover",
+               `:=`(description = "The proportion of a grid box covered by cloud at the specified time, varying between 0 and 1.",
+                    units = "N/A",
+                    example = "0.72")]
+
+climate_fields[columnNames == "10m_wind_gust",
+               `:=`(description = "The maximum 10m wind gust since previous post-processing. Maximum 3 second wind at 10m height, as defined by WMO.",
+                    units = "m s^-1",
+                    example = "8.14")]
+
+climate_fields[columnNames == "instantaneous_10m_wind_gust",
+               `:=`(description = "The maximum wind gust at the specified time, at a height of 10m above the surface of the Earth. WMO defines a wind gust as the maximum of the wind averaged over a 3 second interval. This is shorter than the model time step, see ERA5 documentation for more info.",
+                    units = "m s^-1",
+                    example = "7.95")]
+
+climate_fields[columnNames == "10m_u_component_of_wind",
+               `:=`(description = "The eastward component of the 10m wind. The horizontal speed of air moving to the east at a height of 10m above the surface of the Earth. 
+Can be combined with the V component of the 10m wind to give the speed and direction of the horizontal 10m wind.",
+                    units = "m s^-1",
+                    example = "4.64")]
+
+climate_fields[columnNames == "10m_v_component_of_wind",
+               `:=`(description = "The northward component of the 10m wind. The horizontal speed of air moving to the east at a height of 10m above the surface of the Earth. Can be combined with the U component of the 10m wind to give the speed and direction of the horizontal 10m wind.",
+                    units = "m s^-1",
+                    example = "-1.88")]
+
+climate_fields[columnNames == "snow_depth",
+               `:=`(description = "Depth of snow from the snow-covered area of a grid box. Given in meters of water equivalent - the depth of water if the snow melted and was spread evenly over the whole grid box.",
+                    units = "m water equivalent",
+                    example = "0.0023744756")]
+
+climate_fields[columnNames == "snowfall",
+               `:=`(description = "Accumulated snow that falls to the Earth's surface. This is the sum of large-scale and convective snowfall. 
+This is the snow accumulated over the previous hour.",
+                    units = "m water equivalent",
+                    example = "0.000271154199999999")]
+
+climate_fields[columnNames == "large_scale_snowfall_rate_water_equivalent",
+               `:=`(description = "Rate of snowfall at the specified time generated by the cloud scheme in the ECMWF forecast. Snowfall rate is given in terms of water equivalent.",
+                    units = "kg m^-2 s^-1",
+                    example = "0.0000315051")]
+
+
+colnames(climate_fields) <- c("Field", 
+                              "Description", 
+                              "Units", 
+                              "Class", 
+                              "Example value")
+
+
+climate_fields <- my.flex(climate_fields)
+
+```
+
+`r tab_caps("climate_fields")`
+```{r}
+climate_fields
+```
+
+
+```{r save, include = FALSE}
+
+save(nrow_climate,
+     ncol_climate,
+     file = climate_stats_file
+)
+
+```
+

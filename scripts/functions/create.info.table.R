@@ -17,14 +17,14 @@
 #' @author Ellen Webborn, \email{e.webborn@@ucl.ac.uk}
 #' @export
 
-create.info.table <- function(vers = release_date,
+create.info.table <- function(vers = release,
                               auth = "Ellen Webborn",
                               proj = "Smart Energy Research Lab (SERL)",
                               org = "University College London (UCL)",
                               col_widths = c(1.2, 3)) {
   it <- data.table(
     attributes = c("Creation date",
-                   "Version",
+                   "Edition",
                    "Author",
                    "Project",
                    "Organisation"),

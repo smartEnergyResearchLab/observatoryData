@@ -1,0 +1,999 @@
+---
+title: "Smart meter consumption data:  \nTechnical documentation"
+output: 
+  word_document:
+    reference_doc: SERL_word_template_landscape1.docx
+    toc: yes
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+# load relevant libraries
+library(data.table)
+library(ggplot2)
+library(knitr)
+library(captioner)
+library(lubridate)
+library(flextable)
+library(officer)
+library(stringr)
+
+# Import all filenames, locations, source function files
+source("D:/Users/ucldata/observatory_release_pre_processing/observatoryData/scripts/edition02/setup_edition02.R")
+
+```
+
+```{r defineInputs, include = FALSE}
+
+# load_table_data <- FALSE # TRUE if we've run this file before and don't want to re-process the data (only edit the text, formatting, etc.)
+
+min_n_to_determine_unit_error <- 30
+
+# Define plotting/reporting variables for the markdown output
+fig.h <- 6
+fig.w <- 10
+fullwidth <- TRUE
+font.size <- 18
+geom.text.size <- 5
+
+```
+
+```{r loadData, include = FALSE}
+
+load(rt_processed_file)
+load(sm_doc_input_file)
+
+```
+
+```{r functions, include = FALSE}
+
+add.simple.table.superscript <- function(flex_table,
+                                         before = "m",
+                                         after = "",
+                                         power = "3",
+                                         row_ids = c(1, 2),
+                                         col_name = "Units",
+                                         t_part = "body") {
+  # puts superscript formatting in a flextable. E.g. with the
+  #  defaults, we'd add m^3 (formatted) to rows 1 and 2 in
+  #  column called units.
+  
+  formatted_table <- compose(
+    flex_table,
+    i = row_ids,
+    j = col_name,
+    part = t_part,
+    value = as_paragraph(before,
+                         as_sup(power),
+                         after)
+  )
+  
+  return(formatted_table)
+}
+
+my.flex <- function(t, autofit = TRUE) {
+  ft <- flextable(t)
+  ft <- theme_booktabs(ft)
+  ft <- theme_zebra(ft, 
+                    odd_header = rgb(84/255, 141/255, 212/255, 1),
+                    even_body = "transparent",
+                    odd_body = rgb(242/255, 242/255, 242/255, 1))
+  ft <- color(ft, color = "white", part = "header")
+  ft <- italic(ft, italic = TRUE, part = "header")
+  ft <- bold(ft, bold = FALSE, part = "header")
+  if(autofit == TRUE) {
+    ft <- autofit(ft)
+  } else{
+    ft <- set_table_properties(ft, width = 1, layout = "autofit")
+  }
+  return(ft)
+}
+
+remove.filename.version <- function(file_id) {
+  name_long <- get.serl.filename(file_id, release_version)
+  name_short <- str_sub(name_long, end = -3)
+}
+
+```
+
+```{r}
+info_tab
+```
+
+```{r captions, include = FALSE}
+
+tab_caps(name = "read.type.tab", 
+         caption = "Smart meter data types, defined by 'deviceType' and 'readType'. ")
+
+tab_caps(name = "hh.cols.tab", 
+         caption = "Half-hourly data fields. Error flags are defined in the Error Flags section below.")
+
+tab_caps(name = "d.cols.tab", 
+         caption = "Daily data fields. See the Error Flags section below for definitions of the error flags used in this table.")
+
+tab_caps("relevant.flags", 
+         caption = "Error flags and their meanings.") 
+
+tab_caps("high_lim_tab", 
+         caption = "Limits used to determine if a read is high enough for a 'very high read' flag (-2).") 
+
+tab_caps("sum.match.tab", 
+         caption = "Electricity and gas 'sum_match' values and their meanings.")
+
+tab_caps("sched.tab", 
+         caption = "Read-type data quality summary: data fields. Error codes are explained above in the Error Flags section. Note that statistics for valid reads exclude valid reads recorded at the wrong time.")
+
+tab_caps("partic.tab", 
+         caption = "Participant data quality summary: data fields")
+
+```
+
+
+# Introduction
+
+This document describes the half-hourly and daily datasets available to researchers with secure access to the SERL Observatory datasets, along with two data quality summary tables. The data were collected from the earliest date available. The datasets described in this document are:
+
+- _`r paste(remove.filename.version("daily_data"), "{number}.csv", sep = "")`_: daily electricity and gas readings with some additional derived columns
+
+- _`r paste(remove.filename.version("hh_data"), "{number}.csv", sep = "")`_: half-hourly electricity and gas readings with some additional derived columns (note that this dataset also includes reactive readings and export readings where available)
+
+- _`r paste(remove.filename.version("rt_data"), "{number}.csv", sep = "")`_: data quality summary for each read type for each participant (such as number of errors found by type) and basic read statistics (such as mean and maximum)
+
+- _`r paste(remove.filename.version("ps_data"), "{number}.csv", sep = "")`_: data quality summary for each participant (less detail than the read-type summary data, but also including basic participant information such as region and number of questions answered on the survey)
+
+where _{number}_ is the number of the data release, _e.g._ "02" (note that the first data release files are labelled with the release date rather than edition number).
+
+This document is structured as follows: we start with some basic information about how the data were collected and the different types of reading available, then we describe the two smart meter data tables (daily and half-hourly). Next we define the different types of error flag created, and finally we describe the data quality summary tables (at the read-type level and the participant level). 
+
+
+## Data collection
+
+Half-hourly and daily smart meter readings are stored on the smart meter, and accessed by the Smart Energy Research Lab (SERL) as follows. The University of Essex (UK Data Archive) uses a DCC adaptor service provided by CGI to communicate with the DCC, which acts as a pipe to communicate the smart meter readings to CGI, who send the readings to the UK Data Archive. This happens every night to collect data from the previous day.Not all properties have a gas meter we are able to access - for example, if there is only a SMETS2 electricity meter but not a SMETS2 gas meter, or if the property does not have mains gas. Check the EPC and survey data to identify properties which have gas central heating but no SERL gas data if this may affect your analysis. 
+
+
+## Smart meter read types
+
+Smart meter read types are defined by two variables: 'deviceType' and 'readType'. Together they combine to define the type of smart meter data. The full list of smart meter data types are shown in the table below. Note that 'GPF' stands for 'Gas Proxy Function' (a proxy for the gas meter) and 'ESME' stands for 'Electricity Smart Metering Equipment' (the electricity meter). 
+
+
+```{r readTypes, include = FALSE}
+
+  read.type.tab[, units := "Wh"]
+  read.type.tab[deviceType == "GPF", units := "m^3^"]
+  
+  read.type.tab[deviceType == "ESME" & readType == "DL", 
+                `:=`(description = "Daily active electricity import", 
+                     position = 1)]
+  read.type.tab[deviceType == "ESME" & readType == "AI", 
+                `:=`(description = "Half-hourly active electricity import", 
+                     position = 3)]
+  read.type.tab[deviceType == "ESME" & readType == "AE", 
+                `:=`(description = "Half-hourly active electricity export", 
+                     position = 6)]
+  read.type.tab[deviceType == "ESME" & readType == "RI", 
+                `:=`(description = "Half-hourly reactive electricity import", 
+                     position = 4)]
+  read.type.tab[deviceType == "ESME" & readType == "RE", 
+                `:=`(description = "Half-hourly reactive electricity export", 
+                     position = 7)]
+  read.type.tab[deviceType == "GPF" & readType == "DL", 
+                `:=`(description = "Daily gas import", 
+                     position = 2)]
+  read.type.tab[deviceType == "GPF" & readType == "AI", 
+                `:=`(description = "Half-hourly gas import", 
+                     position = 5)]
+  
+  setkey(read.type.tab, position)
+  
+  
+  read.type.tab <-
+    read.type.tab[, .(deviceType, readType, units, description)]
+  setnames(
+    read.type.tab,
+    old = c("units", "description"),
+    new = c("Units", "Description")
+  )
+
+
+
+read_type_tab <- my.flex(read.type.tab)
+read_type_tab <- add.simple.table.superscript(read_type_tab,
+                                                row_ids = c(2, 5))
+
+
+```
+
+`r tab_caps("read.type.tab")`
+```{r}
+read_type_tab
+```
+
+
+## Changes since the previous edition
+
+In addition to the inclusion of participants from wave 2 recruitment and the extension of data to 31st October 2020, a number of changes have been made to the processing of the raw data. The main changes are:
+
+- Previously we believed daily reads to be taken at midnight UTC time, whereas our analysis has shown that the reads are taken at midnight local time (changes during British Summer Time (BST)). Half-hourly reads are taken in UTC, therefore half-hourly sums are now converted to local time to compare with daily reads. 
+
+- The error flags in the first release reflected the validity of both the read and the read time. This can be ambiguous, so the error flags now relate only to our beliefs about the validity of the read (value). The *Valid_read_time* flag indicates the validity of the read time. 
+
+- Error flag value 3 has been added for instances where one type of read is recording at the wrong time and another type of read (being flagged) is 'missing' because the time is invalid so no read is required. This 'missing' read should be ignored. 
+
+- Some meters were found to be recording in Wh (the correct units) and after a meter replacement/upgrade the units changed to kWh. This was not captured in the previous data release. 
+
+- To cut down on the size of the datasets some columns previously added have been removed where considered superfluous. 
+
+- Where no reads exist at a given time there will be no row in the dataset for that participant. In the latest release we now create a row in the daily data if there is a valid half-hourly sum for the day, so that researchers can use this sum more easily to impute the missing daily value. 
+
+- The half-hourly sum columns only contain values if the half-hourly sum is deemed to be valid (the correct number of half-hourly reads all valid). Otherwise the value is NA (not the case previously).
+
+- Limits used to class a read as 'very high' have been refined (see section below).
+
+- We provide a file *bst_dates_to_2024.csv* detailing the start and end dates of British Summer Time to help researchers identify potentially anomalous dates in the datasets and consider the impact of clock changes on their research. 
+
+We continue to analyse and improve the SERL datasets and we aim to strike a balance between improving the data and minimising inconvenience to researcher caused by changes. We welcome feedback to improve our processes. 
+
+
+# Smart meter data tables
+
+## Half-hourly data
+
+The half-hourly data table has `r ncol_hh` columns. The fields are described in the table below. While the original data have not been modified, additional columns have been added to flag potential errors (see the Error Flags section below) and convert between units. This processing was done using `r paste(R.Version()$version.string)`. Code used for processing will be made available shortly on the SERL github repository [github.com/smartEnergyResearchLab](github.com/smartEnergyResearchLab).
+
+Note that if no data were returned for any meter at a particular time then that row will be missing from the dataset rather than being an empty row. The 'class' field is the R class (e.g. R calls a Boolean a logical).  
+
+```{r hhColumnsTable, include = FALSE}
+
+hh.cols.tab <- data.table(
+  columnNames = hh_colnames,
+  description = rep(NA_character_, ncol_hh),
+  units = rep(NA_character_, ncol_hh),
+  class = hh_col_class,
+  example = rep(NA_character_, ncol_hh,),
+  type = rep("Derived", ncol_hh)
+)
+
+hh.cols.tab[columnNames == "PUPRN",
+            `:=`(description = "Pseudonymised participant identifier",
+                 units = "NA",
+                 example = "1VUXXXF1",
+                 type = "Assigned")]
+
+hh.cols.tab[columnNames == "Read_date_effective_local",
+            `:=`(description = "Date of read (same as date of Read_date_time_local unless read taken at midnight, then the previous day since data pertains to the previous day)",
+                 units = "%Y-%m-%d",
+                 example = "2019-11-01")]
+
+hh.cols.tab[columnNames == "Read_date_time_local",
+            `:=`(description = "Time read taken (local time: GMT or BST)",
+                 units = "%Y-%m-%d %H:%M:%S tz",
+                 example = "2020-07-02 00:03:30 BST")]
+
+hh.cols.tab[columnNames == "Read_date_time_UTC",
+            `:=`(description = "Time read taken in UTC",
+                 units = "%Y-%m-%d %H:%M:%S",
+                 example = "2020-07-02 00:02:30",
+                 type = "Primary")]
+
+hh.cols.tab[columnNames == "HH",
+            `:=`(description = "Half-hour identifier between 1 and 48 (NA if not exactly on the hour or half-hour)",
+                 units = "NA",
+                 example = "48",
+                 type = "Primary")]
+
+hh.cols.tab[columnNames == "Elec_act_imp_hh_Wh",
+            `:=`(description = "Half-hourly electricity active import read",
+                 units = "Wh",
+                 example = "109",
+                 type = "Primary")]
+
+hh.cols.tab[columnNames == "Elec_react_imp_hh_varh",
+            `:=`(description = "Half-hourly electricity reactive import read",
+                 units = "varh",
+                 example = "15",
+                 type = "Primary")]
+
+hh.cols.tab[columnNames == "Elec_act_exp_hh_Wh",
+            `:=`(description = "Half-hourly electricity active export read",
+                 units = "Wh",
+                 example = "65",
+                 type = "Primary")]
+
+hh.cols.tab[columnNames == "Gas_hh_m3",
+            `:=`(description = "Half-hourly gas import read",
+                 units = "m^3^",
+                 example = "0.244",
+                 type = "Primary")]
+
+hh.cols.tab[columnNames == "Elec_react_exp_hh_varh",
+            `:=`(description = "Half-hourly electricity reactive export read",
+                 units = "varh",
+                 example = "14",
+                 type = "Primary")]
+
+hh.cols.tab[columnNames == "Elec_import_exists",
+            `:=`(description = "TRUE if electricity import meter exists in the inventory, otherwise FALSE",
+                 units = "NA",
+                 example = "TRUE")]
+
+hh.cols.tab[columnNames == "Gas_exists",
+            `:=`(description = "TRUE if gas meter exists in the inventory, otherwise FALSE",
+                 units = "NA",
+                 example = "TRUE")]
+
+hh.cols.tab[columnNames == "Elec_act_imp_flag",
+            `:=`(description = "Half-hourly electricity active import error flag",
+                 units = "NA",
+                 example = "-2")]
+
+hh.cols.tab[columnNames == "Gas_flag",
+            `:=`(description = "Half-hourly gas import error flag",
+                 units = "NA",
+                 example = "0")]
+
+hh.cols.tab[columnNames == "Gas_hh_kWh",
+            `:=`(description = "Half-hourly gas import read in kWh using standard conversion, assuming calorific value = 39.5",
+                 units = "kWh",
+                 example = "2.737835")]
+
+hh.cols.tab[columnNames == "Gas_hh_Wh",
+            `:=`(description = "Half-hourly gas import read in Wh using standard conversion, assuming calorific value = 39.5",
+                 units = "Wh",
+                 example = "2737.835")]
+
+hh.cols.tab[columnNames == "Elec_export_exists",
+            `:=`(description = "TRUE if electricity export meter exists in the inventory, otherwise FALSE",
+                 units = "NA",
+                 example = "FALSE")]
+
+hh.cols.tab[columnNames == "Elec_act_exp_flag",
+            `:=`(description = "Half-hourly electricity active export error flag",
+                 units = "NA",
+                 example = "-4")]
+
+hh.cols.tab[columnNames == "Elec_react_imp_flag",
+            `:=`(description = "Half-hourly electricity reactive import error flag",
+                 units = "NA",
+                 example = "1")]
+
+hh.cols.tab[columnNames == "Elec_react_exp_flag",
+            `:=`(description = "Half-hourly electricity reactive export error flag",
+                 units = "NA",
+                 example = "2")]
+
+hh.cols.tab[columnNames == "Valid_read_time",
+            `:=`(description = "FALSE if read time is not on the hour or half hour, otherwise TRUE",
+                 units = "NA",
+                 example = "TRUE")]
+
+colnames(hh.cols.tab) <- c("Field", "Description", "Units", "Class", "Example value", "Variable type")
+
+
+
+
+hh_cols_tab <- my.flex(hh.cols.tab, autofit = FALSE)
+hh_cols_tab <- add.simple.table.superscript(hh_cols_tab,
+                                            row_ids = hh.cols.tab[ , which(Field == "Gas_hh_m3")])
+
+
+```
+
+`r tab_caps("hh.cols.tab")`
+```{r}
+hh_cols_tab
+```
+
+## Daily data
+
+The daily data table has `r ncol_d` columns. The fields are described in the table below. While original data has not been modified, additional columns have been added to flag potential errors (see Error Flags section below) and to convert between units. This processing was done using `r paste(R.Version()$version.string)`.  Code used for processing will be made available shortly on the SERL github repository [github.com/smartEnergyResearchLab](github.com/smartEnergyResearchLab).
+
+Note that if no data were returned for any meter on a particular day then that row will be missing from the dataset rather than being empty. The exception is if there were no daily reads but the right number of half-hourly reads (48 unless the clocks changed) to sum to the daily total. In these instances the rows have been added to allow for easy imputation of a missing daily read with the sum of the half-hourly reads. For comparison between daily reads and daily sums, half-hourly data requires conversion (provided) to local time. A csv file is provided *(bst_dates_to_2024.csv)* which lists the start and end dates of British Summer Time (BST) for reference so the number of half-hours expected on each day is clear. Researchers may wish to avoid clock change days in their analysis, or take them into consideration. 
+
+The daily data includes fields added for comparison between the daily readings and half-hourly readings for the same days. As described in `r tab_caps("d.cols.tab", display = "cite")` there are columns for the sum of the half-hourly readings if there were 48 valid reads taken at the right times (or 46 or 50 reads if the clocks changed), the difference between the half-hourly sum and the daily read (if both exist and are valid), and a 'sum_match' column coded to state the condition of this match. The sum match codes are defined in `r tab_caps("sum.match.tab", display = "cite")` in the Error Flags section. Note that reads are considered invalid if taken at the wrong time (not at midnight for daily reads; not on the hour or half hour for half-hourly reads). 
+
+```{r DColumnsTable, include = FALSE}
+
+
+  d.cols.tab <- data.table(columnNames = d_colnames,
+                            description = rep(NA_character_, ncol_d),
+                            units = rep(NA_character_, ncol_d),
+                            class = d_col_class,
+                            example = rep(NA_character_, ncol_d),
+                            type = rep("Derived", ncol_d))
+  
+  d.cols.tab[columnNames == "PUPRN", `:=`(description = "Pseudonymised participant identifier",
+                                          units = "NA",
+                                          example = "1VUXXXF1",
+                                          type = "Assigned")]
+  
+  # correct
+  d.cols.tab[columnNames == "Read_date_effective_local", `:=`(description = "Date that read relates to (in local time): previous day, unless after midday (then same day)",
+                                                    units = "%Y-%m-%d",
+                                                    example = "2019-11-01")]
+  
+  d.cols.tab[columnNames == "Read_date_time_local", `:=`(description = "Time and date of read (local time). Time not stated if at midnight",
+                                                    units = "%Y-%m-%d",
+                                                    example = "2019-11-02",
+                                                    type = "Primary")]
+  
+  d.cols.tab[columnNames == "Valid_read_time", `:=`(description = "TRUE if reading was at midnight, otherwise FALSE",
+                                                    units = "NA",
+                                                    example = "TRUE")]
+  
+  d.cols.tab[columnNames == "Valid_24h_read_flag", `:=`(description = "1 if this read and previous read both have Valid_read_time = TRUE, otherwise 0",
+                                                    units = "NA",
+                                                    example = "TRUE")]
+  
+  d.cols.tab[columnNames == "Elec_import_exists", `:=`(description = "TRUE if electricity import meter exists in the inventory, otherwise FALSE",
+                                                    units = "NA",
+                                                    example = "TRUE")]
+  
+  d.cols.tab[columnNames == "Elec_act_imp_d_Wh", `:=`(description = "Daily electricity active import read",
+                                                    units = "Wh",
+                                                    example = "5839",
+                                                    type = "Primary")]
+  
+  d.cols.tab[columnNames == "Unit_correct_elec_act_imp_d_Wh", `:=`(description = "Daily electricity active import read corrected from kWh to Wh where kWh reporting is suspected, otherwise equals Elec_act_imp_d_Wh",
+                                                    units = "Wh",
+                                                    example = "5839")]
+  
+  d.cols.tab[columnNames == "Elec_act_imp_d_kWh", `:=`(description = "Unit_correct_elec_act_imp_d_Wh divided by 1000. Note that reads originally recorded in kWh will be integers, otherwise 3 decimal places.",
+                                                    units = "kWh",
+                                                    example = "5.839")]
+  
+  d.cols.tab[columnNames == "Elec_act_imp_flag", `:=`(description = "Daily electricity active import error flag",
+                                                    units = "NA",
+                                                    example = "-2")]
+  
+  d.cols.tab[columnNames == "N_elec_hh", `:=`(description = "Number of valid half-hourly elecricity active import readings available on this date excluding invalid read time data",
+                                                    units = "NA",
+                                                    example = "48")]
+  
+  d.cols.tab[columnNames == "Elec_act_imp_hh_sum_Wh", `:=`(description = "Sum of half-hourly electricity active import reads for this date (NA if there were not 48* valid reads). *46 required when the clocks go forward, 50 when the clocks go back.",
+                                                    units = "Wh",
+                                                    example = "5742")]
+  
+  d.cols.tab[columnNames == "Elec_act_imp_sum_diff", `:=`(description = "Unit_correct_elec_act_imp_d_Wh - Elec_act_imp_hh_sum_Wh",
+                                                    units = "Wh",
+                                                    example = "0")]
+  
+  d.cols.tab[columnNames == "Elec_sum_match", `:=`(description = "Error code for whether the sum of half-hourly electricity active import matches the daily electricity read",
+                                                    units = "NA",
+                                                    example = "1")]
+  
+  d.cols.tab[columnNames == "Gas_exists", `:=`(description = "TRUE if gas meter exists in the inventory, otherwise FALSE",
+                                                    units = "NA",
+                                                    example = "TRUE")]
+  
+  d.cols.tab[columnNames == "Gas_d_m3", `:=`(description = "Daily gas read",
+                                                    units = "m^3",
+                                                    example = "8.214",
+                                                    type = "Primary")]
+  
+  d.cols.tab[columnNames == "Gas_d_kWh", `:=`(description = "Daily gas import read in kWh using standard conversion, assuming calorific value = 39.5",
+                                                    units = "kWh",
+                                                    example = "92.16628")]
+  
+  d.cols.tab[columnNames == "Gas_flag", `:=`(description = "Daily gas import error flag",
+                                                    units = "NA",
+                                                    example = "2")]
+  
+  d.cols.tab[columnNames == "N_gas_hh", `:=`(description = "Number of valid half-hourly gas import readings available on this date excluding invalid read time data",
+                                                    units = "NA",
+                                                    example = "48")]
+  
+  d.cols.tab[columnNames == "Gas_hh_sum_m3", `:=`(description = "Sum of half-hourly gas reads for this date (NA if there were not 48* valid reads). *46 required when the clocks go forward, 50 when the clocks go back.",
+                                                    units = "m^3",
+                                                    example = "8.763")]
+  
+  d.cols.tab[columnNames == "Gas_sum_diff", `:=`(description = "Gas_d_m3 - Gas_hh_sum_m3",
+                                                    units = "m^3",
+                                                    example = "0.273")]
+  
+  d.cols.tab[columnNames == "Gas_sum_match", `:=`(description = "Error code for whether the sum of half-hourly gas import matches the daily gas read",
+                                                    units = "NA",
+                                                    example = "0")]
+  
+  colnames(d.cols.tab) <- c("Field", "Description", "Units", 
+                            "Class", "Example value", "Variable Type")
+
+
+
+d_cols_tab <- my.flex(d.cols.tab, autofit = FALSE)
+d_cols_tab <- add.simple.table.superscript(d_cols_tab,
+                                           row_ids = 12:13)
+
+
+```
+
+
+`r tab_caps("d.cols.tab")`
+```{r}
+d_cols_tab
+```
+
+
+# Error flags
+
+## Flags for individual reads
+
+`r tab_caps("relevant.flags", display = "cite")` shows the meaning of each error flag value. These flags are used for both daily and half-hourly reads. The data quality report gives details about the number of each error found within the data along with other descriptive statistics. Note that the first data release (2020-08) had slightly different error flags (no flag 3 and a flag for invalid read times). Importantly, the error flags are now split so that **these flags relate only to the quality of the read** (missing, too high etc.) and **not the validity of the read time**. The 'Valid_read_time' variable indicates whether the read was at the correct time (or not). Therefore to filter on valid reads at valid times, use both the relevant error flag and the Valid_read_time flag. 
+
+```{r ErrorFlagTable, include = FALSE}
+# -----
+# Create a table called 'flags' to store the error flags, used for presenting the results in the markdown document
+# -----
+
+#   3   Ignore - Reading missing but not required as incorrect read time
+#   2   No meter - or at least none we find via the DCC inventory
+#   1   Valid read - a read that doesn't meet any other error flagging criteria
+#   0   Missing read for an existing meter
+#  -1  'Max read' - see definition in setup
+#  -2  'High read' - see definition in setup
+#  -3  Negative read
+#  -4  Incorrect units - see 'correctUnits' code chunk
+
+relevant.flags <- data.table(
+  Flag = c(3:-4),
+  Meaning = c(
+    "Ignore",
+    "No meter",
+    "Valid",
+    "Missing",
+    "Max read",
+    "Very high but not max",
+    "Negative",
+    "Elec in kWh"
+  ),
+  Details = c(
+    "Invalid read time and no read - row exists for a different read type so ignore",
+    "The gas (or very rarely electricity) meter does not exist in the DCC inventory",
+    "The read exists and does not meet any of the other error flag criteria, thus presumed valid (although may not have a valid read time - check separately)",
+    "The read should exist but is missing",
+    "The read is (presumably) the largest storable number on the meter - details below",
+    "The read is higher than plausible but not a 'Max read' - see section below for thresholds",
+    "The read is negative (none found)",
+    "The electricity read was reported in kWh rather than Wh - details below"
+  )
+)
+
+
+relevant.flags <- my.flex(relevant.flags, autofit = FALSE)
+
+
+```
+
+`r tab_caps("relevant.flags")`
+```{r}
+relevant.flags
+```
+
+
+### 'Max reads' (error flag -1)
+
+We discovered that multiple participants have some electricity readings as 16777215 Wh and multiple gas readings of 16777.215 m^3^. These numbers are all 1s in binary which implies they are the maximum read the (32-bit) meter can store, and likely due to some technical error. We call this type of error 'Max read'. Note that in a few cases the number is the max read stored in 64 bits - these are replaced by the 32-bit maximum to save memory. 
+
+### Very high reads (error flag -2)
+
+
+```{r}
+high_limits <- data.table(deviceType = c(rep("ESME", 3), rep("GPF", 2)),
+                          readType = c("DL", "AI", "AE", "DL", "AI"),
+                          lim = c(48 * 24 * 1000,
+                                  24 * 1000,
+                                  4000 / 2,
+                                  16 * 24,
+                                  16/2),
+                          Units = c(rep("Wh", 3), rep("m^3", 2)),
+                          Assumptions = c("Max 200A fuse, 240V",
+                                          "Max 200A fuse, 240V",
+                                          "4kW max PV capacity",
+                                          "16m^3/hr max capacity",
+                                          "16m^3/hr max capacity")
+                          )
+
+setnames(high_limits, "lim", "High Read Limit")
+
+high_lim_tab <- my.flex(high_limits, autofit = FALSE)
+high_lim_tab <- add.simple.table.superscript(high_lim_tab,
+                                             row_ids = c(4, 5))
+high_lim_tab <- add.simple.table.superscript(high_lim_tab,
+                                             before = "16m",
+                                             after = "/hr max capacity",
+                                             col_name = "Assumptions",
+                                             row_ids = c(4, 5))
+
+```
+
+For gas and active electricity reads we flag if the reading is larger than we deem plausible, attempting to be cautious with our definition of 'plausible'. The following table shows our definitions of what constitutes a 'very high' read (so long as the read is not high enough to be a 'max read'). 
+
+
+`r tab_caps("high_lim_tab")`
+```{r}
+high_lim_tab
+```
+
+
+### Readings in the wrong units (error flag -4)
+
+We also discovered that all daily electricity active import readings were all extremely low for some participants. At the time of the initial investigation (August 2020) there were no participants with a maximum read between 85 and 2285 Wh; therefore we determined that any electricity active import (or export) meter with its highest reading less than 100 was erroneously reporting in kWh rather than in Wh as specified by the Smart Energy Code. This was verified by comparing the daily readings with the sum of the half-hours for the same day. Any readings that were deemed to be valid according to all other criteria were given the 'Elec in kWh' error flag and their data were multiplied by 1000 in the 'unit-corrected' column. Note that we set a limit of at least `r min_n_to_determine_unit_error` readings in order to define a meter as recording in kWh. 
+
+Subsequent investigations in March 2021 revealed that some meters were correctly recording daily electricity readings in Wh up until the date of a meter replacement, at which the daily reads became approximately 1/1000th of the sum of the half-hourly reads. By 'approximately' we mean that after dividing the half-hourly sum by 1000 and rounding down, the result is within 1 of the daily read. For example, half-hourly sums between 5000 and 599 would be classed as approximately 1000 times bigger than a daily read between 4 and 6 (in order to handle rounding errors and slight read mismatch).  In such cases, if a household has at least 5 rows with the daily and half-hourly sums in this situation (excluding daily reads of 0 which may be a different kind of error), all of such cases for the household are flagged as a unit error as above. Without checking all cases manually, a very small number of reads will be mis-flagged as unit errors or unit errors will be missed. 
+
+It is possible that some half-hourly sums are approximately 1/100th of the daily read, indicating readings in tens of Wh. This has been found to affect just a handful of meters at present, and it is left to researchers to decide how best to deal with daily and half-hourly sum mismatches in general. In most cases we believe that the sum of half-hours is more reliable than a daily read, but it depends on the individual meter, and not all days have complete valid half-hourly reads to sum. Note that if there are not the correct number of valid half-hourly reads taken at the right times then the half-hourly sum variable will be NA. 
+
+### Zero Reads
+
+Zero reads are not yet flagged as invalid although this may change in subsequent data releases. It has been found that some daily reads default to zero during British Summer Time (BST) which could be an obvious error to flag, but the validity of other zero reads is less clear. Considering mismatches between half-hourly sums and daily reads is advised when performing data quality analysis. 
+
+
+## Flags for the daily and half-hourly sum match
+
+The daily data table contains fields called "Elec_sum_match" and "Gas_sum_match" which give an error flag for how the sum of the half-hourly reads for that day compares with the daily read. They are described in the table below. It isn't always possible to compare the sum and the daily readings; if any were reported in the wrong units, if any reads were taken at the wrong time, or if any of the reads were missing. By 'any' we mean the daily read and the 48 half-hourly reads (46 or 50 on clock change days). 
+
+```{r sumMatchTable, include = FALSE}
+
+elec_match_limit <- 1     # (Wh)
+elec_similar_limit <- 10  # (Wh)
+gas_match_limit <- 0.001*1000  # (L)
+gas_similar_limit <- 0.01*1000 # (L)
+
+sum.match.tab <- data.table(Code = 3:-2,
+                            Meaning = c(
+                              "Daily electricity read originally recorded in kWh, match not tested due to rounding issues.",
+                              "No meter: the (gas) meter does not exist in the DCC inventory",
+                              paste("Daily read and half-hourly sum match: for electricity difference <= ", 
+                              elec_match_limit," Wh, for gas difference <= ", gas_match_limit, " L", sep = ""),
+                              "Comparison not possible: do not have 48 valid half-hourly reads or daily read isn't valid",
+                              paste("Daily read and half-hourly sum are similar but don't match: for electricity ",
+                              elec_match_limit," < difference <= ", elec_similar_limit ," Wh, for gas ", 
+                              gas_match_limit, " < difference <= ", gas_similar_limit, " L", sep = ""), 
+                              "Daily read and half-hourly read are neither similar nor match but are both valid"
+                              )
+                            )
+
+sum.match.tab <- my.flex(sum.match.tab)
+
+```
+
+`r tab_caps("sum.match.tab")`
+```{r}
+sum.match.tab
+```
+
+
+
+# Data quality summary tables
+
+There are two tables that give a summary of the data quality at 1) the individual read type level and 2) the participant level.
+
+## Read-type data quality summary
+
+A read type is a combination of device type and schedule type, such as daily active electricity import or half-hourly reactive electricity export. There are `r ncol_reads` columns in the read-type data quality table. Each read type for each participant has its own row, which gives the number of readings with each error code, the start and end dates of the schedule (when we expect the earliest and latest readings to be), and some calculated columns for the percentage missing and valid etc. The details are given in the table below. Note that reads with error code 3 are not included in this table as they are an artifact of the data structure rather than genuine reads (see above for details). 
+
+
+```{r schedules, include = FALSE}
+
+  ncols.sched.tab <- ncol(rt_summary)
+  
+  sched.tab <- data.table(columnNames = rt_colnames,
+                            description = rep(NA_character_, ncols.sched.tab),
+                            units = rep(NA_character_, ncols.sched.tab),
+                            class = rt_col_class,
+                            example = rep(NA_character_, ncols.sched.tab))
+  
+  
+  sched.tab[columnNames == "PUPRN",
+            `:=`(description = "Pseudonymised participant identifier",
+                 units = "NA",
+                 example = "1VUXXXF1")]
+  
+  sched.tab[columnNames == "valid",
+            `:=`(description = "Number of valid readings taken at the right time (error flag 1 and Valid_read_time = TRUE)",
+                 units = "NA",
+                 example = "96")]
+  
+  sched.tab[columnNames == "missing",
+            `:=`(description = "Number of missing readings (error flag 0)",
+                 units = "NA",
+                 example = "27")]
+  
+  
+  sched.tab[columnNames == "maxRead",
+            `:=`(description = "Number of readings with the 'Max Read' error (flag -1)",
+                 units = "NA",
+                 example = "4")]
+  
+  sched.tab[columnNames == "highRead",
+            `:=`(description = "Number of readings between the 'very high' and the 'max read' thresholds (error flag -2)",
+                 units = "NA",
+                 example = "2")]
+  
+  sched.tab[columnNames == "negative",
+            `:=`(description = "Number of negative readings with (error flag -3)",
+                 units = "NA",
+                 example = "0")]
+  
+  sched.tab[columnNames == "wrongUnits",
+            `:=`(description = "Number of readings with electricity recorded in kWh (error flag -4)",
+                 units = "NA",
+                 example = "3")]
+  
+  
+  sched.tab[columnNames == "validWrongTime",   
+            `:=`(description = "Number of valid readings taken at the incorrect time (error flag 1 and Valid_read_time = FALSE)",
+                  units = "NA",
+                  example = "7")]
+  
+  sched.tab[columnNames == "deviceType",
+            `:=`(description = "Device type: gas (GPF) or electricity (ESME) meter",
+                 units = "NA",
+                 example = "GPF")]
+  
+  sched.tab[columnNames == "readType",
+            `:=`(description = "Defined in Table 1",
+                 units = "NA",
+                 example = "AI")]
+  
+  sched.tab[columnNames == "theoreticalStart",
+            `:=`(description = "Earliest possible reading for the schedule",
+                 units = "%Y-%m-%d",
+                 example = "2019-11-01")]
+  
+  sched.tab[columnNames == "theoreticalEnd",
+            `:=`(description = "Latest possible reading for the schedule",
+                 units = "%Y-%m-%d",
+                 example = "2020-02-29")]
+  
+  sched.tab[columnNames == "firstValidReadDate",
+            `:=`(description = "Earliest date with a valid read (error flag 1 and Valid_read_time = TRUE)",
+                 units = "%Y-%m-%d",
+                 example = "2018-11-26")]
+  
+  sched.tab[columnNames == "lastValidReadDate",
+            `:=`(description = "Latest date with a valid read (error flag 1 and Valid_read_time = TRUE)",
+                 units = "%Y-%m-%d",
+                 example = "2020-05-31")]
+  
+  sched.tab[columnNames == "daysRange",
+            `:=`(description = "Schedule length = scheduleEnd - scheduleStart + 1",
+                 units = "NA",
+                 example = "100")]
+  
+  sched.tab[columnNames == "maxPossReads",
+            `:=`(description = "Maximum possible reads available (= daysRange for daily data, = 48 * daysRange for half-hourly)",
+                 units = "NA",
+                 example = "4800")]
+  
+  sched.tab[columnNames == "percValid",
+            `:=`(description = "Percentage of possible reads that are valid (error flag 1 and Valid_read_time = TRUE) rounded to 2 decimal places",
+                 units = "NA",
+                 example = "95.02")]
+  
+  sched.tab[columnNames == "percMissing",
+            `:=`(description = "Percentage of possible reads that are missing (error flag 0) rounded to 2 decimal places",
+                 units = "NA",
+                 example = "2.13")]
+  
+  sched.tab[columnNames == "percError",
+            `:=`(description = "Percentage of possible reads that are erroneous (error flag -1, -2, -3, -4 or Valid_read_time = FALSE) rounded to 2 decimal places",
+                 units = "NA",
+                 example = "3.04")]
+  
+  sched.tab[columnNames == "percValidOrUnitError",
+            `:=`(description = "Percentage of possible reads that are valid or have a unit error (Valid_read_time = TRUE and error flag 1, or -4) rounded to 2 decimal places",
+                 units = "NA",
+                 example = "96.98")]
+  
+  sched.tab[columnNames == "minValidRead",
+            `:=`(description = "Minimum read of the valid reads (after unit-correction if necessary)",
+                 units = "Wh (elec), m^3 (gas)",
+                 example = "0")]
+  
+  sched.tab[columnNames == "maxValidRead",
+            `:=`(description = "Maximum read of the valid reads (after unit-correction if necessary)",
+                 units = "Wh (elec), m^3 (gas)",
+                 example = "302")]
+  
+  sched.tab[columnNames == "meanValidRead",
+            `:=`(description = "Mean of the valid reads (after unit-correction if necessary), 2 decimal places",
+                 units = "Wh (elec), m^3 (gas)",
+                 example = "43.21")]
+  
+  sched.tab[columnNames == "medianValidRead",
+            `:=`(description = "Median of the valid reads (after unit-correction if necessary)",
+                 units = "Wh (elec), m^3 (gas)",
+                 example = "46")]
+  
+  sched.tab[columnNames == "sdValidRead",
+            `:=`(description = "Standard deviation of the valid reads (after unit-correction if necessary), 2 decimal places",
+                 units = "Wh (elec), m^3 (gas)",
+                 example = "1.39")]
+  
+  colnames(sched.tab) <- c("Field", "Description", "Units", "Class", "Example value")
+  
+  
+
+  sched_tab <- my.flex(sched.tab, autofit = FALSE)
+  sched_tab <- compose(sched_tab,
+                     i = 21:25,
+                     j = "Units",
+                     part = "body",
+                     value = as_paragraph(
+                       "Wh (elec), m",
+                       as_sup("3"),
+                       " (gas)"
+                     ))
+
+
+
+```
+
+`r tab_caps("sched.tab")`
+```{r}
+sched_tab
+```
+
+
+## Participant-level summary
+
+The second data quality summary table has one row per participant and includes additional information about the participant such as the region where they live and how many survey questions they answered. It also provides information about the start and end dates of each schedule and the number and percentage of reads that were valid for that schedule. There are `r ncol_pp` columns in this data table. 
+
+The read-related column names take the form "text_W_X_Y_Z" for electricity readings and "text_W_X_Z" for gas readings. Rather than explaining every single column, here is key to the variable component of the name:
+
+- W = device type (either electricity meter ("ESME") or Gas Proxy Function i.e. gas meter ("GPF"))
+
+- X = whether the read is half-hourly ("HH") or daily ("D")
+
+- Y = active ("Act") or reactive ("React") power (electricity reads only)
+
+- Z = import ("Im") or export ("Ex")
+
+For example "NumValid_ESME_D_Act_IM" is the number of valid daily electricity active import readings. The text in the first part of the name is described in the table below. 
+
+
+```{r participants, include = FALSE}
+
+  ncols.partic.tab <- 15 # Not strictly true but we don't write them all out individually
+  
+  partic.tab <-
+    data.table(
+      columnNames = c(
+        p_colnames[1:11],
+        "Start_W_X_Y_Z",
+        "End_W_X_Y_Z",
+        "NumValid_W_X_Y_Z",
+        "PercValid_W_X_Y_Z"
+      ),
+      description = rep(NA_character_, ncols.partic.tab),
+      units = rep(NA_character_, ncols.partic.tab),
+      class = p_col_class[1:ncols.partic.tab],
+      example = rep(NA_character_, ncols.partic.tab)
+    )
+  
+  partic.tab[columnNames == "PUPRN",
+             `:=`(description = "Pseudonymised participant identifier",
+                  units = "NA",
+                  example = "1VUXXXF1")]
+  
+  partic.tab[columnNames == "Region",
+             `:=`(description = "Region in GB",
+                  units = "NA",
+                  example = "East Midlands")]
+  
+  partic.tab[columnNames == "LSOA",
+             `:=`(description = "Lower Super Output Area in GB",
+                  units = "NA",
+                  example = "E01015916")]
+  
+  partic.tab[columnNames == "grid_cell",
+             `:=`(description = "Grid cell for linking to climate data",
+                  units = "NA",
+                  example = "38_31")]
+  
+  partic.tab[columnNames == "IMD_quintile",
+             `:=`(description = "Index of Multiple Deprivation quintile (1 is most deprived, 5 is least deprived)",
+                  units = "NA",
+                  example = "2")]
+  
+  partic.tab[columnNames == "EPC_exists",
+             `:=`(description = "TRUE if a record exists in the EPC dataset for the participant",
+                  units = "NA",
+                  example = "TRUE")]
+  
+  partic.tab[columnNames == "EPC_rating",
+             `:=`(description = "EPC rating (original column name 'current_energy_rating') - a letter between A and G inclusive",
+                  units = "NA",
+                  example = "C")]
+  
+  partic.tab[columnNames == "pilot_test_cell",
+             `:=`(description = "Test cell (1 to 12) assigned to participants for the pilot study (testing recruitment approaches)",
+                  units = "NA",
+                  example = "12")]
+  
+  partic.tab[columnNames == "N_survey_ans",
+             `:=`(description = "Number of questions answered in the survey (30 relevant to all, a further 9 may be relevant depending on other answers)",
+                  units = "NA",
+                  example = "35")]
+  
+  partic.tab[columnNames == "Perc_surve_ans",
+             `:=`(description = "% of relevant questions answered in the survey (may be greater than 100% if question relevance was not possible to determine or if question skipping was not done correctly)",
+                  units = "NA",
+                  example = "98.1203")]
+  
+  partic.tab[columnNames == "invalidReadTimes_D",
+             `:=`(description = "Number of rows in the daily data with the read at the wrong time (not at midnight)",
+                  units = "NA",
+                  example = "1")]
+  
+  partic.tab[columnNames == "invalidReadTimes_HH",
+             `:=`(description = "Number of rows in the half-hourly data with the read at the wrong time (not on the hour or half hour)",
+                  units = "NA",
+                  example = "3")]
+  
+  partic.tab[columnNames == "Start_W_X_Y_Z",
+             `:=`(description = "First valid read date for data type W_X_Y_Z",
+                  units = "%Y-%m-%d",
+                  example = "2019-11-01")]
+  
+  partic.tab[columnNames == "End_W_X_Y_Z",
+             `:=`(description = "Last valid read date for data type W_X_Y_Z",
+                  units = "%Y-%m-%d",
+                  example = "2020-02-29")]
+  
+  partic.tab[columnNames == "NumValid_W_X_Y_Z",
+             `:=`(description = "Number of valid reads (error code 1) for data type W_X_Y_Z",
+                  units = "NA",
+                  example = "98")]
+  
+  partic.tab[columnNames == "PercValid_W_X_Y_Z",
+             `:=`(description = "Percentage of possible reads (using theoretical start and end dates rather than actual valid read start and end dates) that are valid (error code 1) for data type W_X_Y_Z",
+                  units = "NA",
+                  example = "95.2")]
+  
+  colnames(partic.tab) <- c("Field (or field name format)", 
+                            "Description", 
+                            "Units", 
+                            "Class", 
+                            "Example value")
+  
+
+partic_tab <- my.flex(partic.tab, autofit = FALSE)
+
+```
+
+`r tab_caps("partic.tab")`
+```{r}
+partic_tab
+```
+
+
+```{r saving, include = FALSE}
+# if(load_table_data == FALSE) {
+#   save(
+#     read.type.tab,
+#     hh.cols.tab,
+#     d.cols.tab,
+#     sched.tab,
+#     partic.tab,
+#     first_read_date_hh,
+#     last_read_date_hh,
+#     n_hh_p,
+#     nrow_hh,
+#     ncol_hh,
+#     first_read_date_d,
+#     last_read_date_d,
+#     n_d_p,
+#     nrow_d,
+#     ncol_d,
+#     nrow_reads,
+#     ncol_reads,
+#     nrow_pp,
+#     ncol_pp,
+#     file = sm_doc_input_file
+#   )
+# }
+```
+

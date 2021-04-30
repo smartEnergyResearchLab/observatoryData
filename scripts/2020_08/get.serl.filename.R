@@ -67,12 +67,14 @@ get.serl.filename <- function(file_identifier, version_id) {
   } else if(file_identifier == "survey_questions") {
     name <- "survey_questions"    
   } else if(file_identifier == "survey_responses") {
-    name <- "survey_responses_summary"    
+    name <- "survey_responses_summary"     
+  } else if(file_identifier == "survey_dictionary") {
+    name <- "survey_data_dictionary"    
   } else if(file_identifier == "readme") {
     name <- "README_data_and_documentation_summary"
   } else {print("Incorrect file identifier")}
   
-  filename <- paste("SERL_", name, "_v", version_id, sep = "")
+  filename <- paste("serl_", name, "_", version_id, sep = "")
   return(filename)
 }
 

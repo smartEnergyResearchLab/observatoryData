@@ -48,8 +48,8 @@ survey_location <- "S:/ENERGINST_EaB_Project_17_SMRP/Data/Pilot_survey/"
 # No input required -------------------------------------------------------
 
 ## Source functions
-source("N:/R/observatoryData/scripts/get.serl.filename.R")
-source("N:/R/observatoryData/scripts/create.info.table.R")
+source("N:/R/observatoryData/scripts/functions/get.serl.filename.R")
+source("N:/R/observatoryData/scripts/functions/create.info.table.R")
 
 ## Define common variables
 fig_caps <- captioner::captioner(prefix = "Figure")
