@@ -1,7 +1,8 @@
 # SERL observatory data
 
-[Code](scripts) used to process the SERL observatory datasets prior to release via the UKDS. The code is organised by release data/version.
+Code used to process the SERL observatory datasets prior to release via the UKDS. The code is organised by release data/version:
 
-The datasets are (currently):
+ * [Code](tree/master/scripts/2020_08) used to process the “Smart Energy Research Lab [Exploratory Data](https://beta.ukdataservice.ac.uk/datacatalogue/studies/study?id=8643), 2019-2020: Secure Access” – (Study Number 8643)
+ * [Code](tree/master/scripts/edition02) used to process version 02 of the Smart Energy Research Lab [Observatory Data](https://beta.ukdataservice.ac.uk/datacatalogue/studies/study?id=8666), 2019-2020: Secure Access 
 
- * Smart Energy Research Lab [Observatory Data](https://beta.ukdataservice.ac.uk/datacatalogue/studies/study?id=8666), 2019-2020: Secure Access 
+In addition we maintain a number of useful [functions]((tree/master/scripts/functions)) which are re-used in the above data processing scripts.
